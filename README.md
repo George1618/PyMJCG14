@@ -2,13 +2,14 @@
 
 Este repositório tem como objetivo fazer as entregas do projeto da disciplina de [CK0202 - Construção de Compiladores](https://cc.ufc.br/curso/matriz-curricular/?cod=CK0202) (Semestre 2022.1) do [Departamento de Computação](https://dc.ufc.br/pt/) da [Universidade Federal](https://www.ufc.br/). Professor responsável: [Lincoln Souza Rocha](https://cc.ufc.br/curso/corpo-docente/lincoln).
 
-# Equipe Responável
+# Equipe Responsável
 
-Os seguintes alunos (equipe XXXXX) são responsáveis pelo projeto: 
+Os seguintes alunos (equipe 14) são responsáveis pelo projeto:
 
--  Mátricula: XXXX | Aluno: XXXXX 
--  Mátricula: XXXX | Aluno: XXXXX
--  Mátricula: XXXX | Aluno: XXXXX
+-  Matrícula: 474311 | Aluno: BRUNO BARROS DE SOUSA 
+-  Matrícula: 471585 | Aluno: FELIPE BEZERRA DE MENEZES BENICIO DE SOUSA
+-  Matrícula: 471933 | Aluno: GEORGE HARRISON DE ALMEIDA MENDES
+
 
 # Método de Avaliação
 
@@ -67,7 +68,7 @@ Note que MiniJava trata ``System.out.println`` como uma palavra reservada (``PRI
  O projeto do compilador segue a estrutura organizacional inicial abaixo que deve ser evoluída ao longo das entregas:
 
 ```
-PyMJCG00
+PyMJCG14
 ├── .github/workflows
 │   └── ci.yml
 ├── doc
@@ -138,7 +139,7 @@ PyMJCG00
 
 O arquivo `ci.yml` descreve o workflow de integração contínua que é executado toda vez que um commit é feito no branch `main`. O diretório `pymjc` contém a estrutura básica do compilador, que se divide em `back` (**back end**), `front` (**front end**) e o ponto de entrada do compilador em si `run.py`. O arquivo `run.py` apresenta uma implementação inicial de como exeutar o compilador, veja a classe `MJCompiler` dentro dele. Dentro do diretório `front` deve fica a implementação dos módulos relacionados com o front end do compilador. Lá já se incontram implementações parciais do analisador léxico (veja a classe `MJLexer` dentro de `lexer.py`) e do analisador sinático (veja a classe `MJParser` dentro de `parser.py`). Além disso, os elementos para construção da árvore de sintaxe abstrata encontram-se no arquivo `ast.py`. Os módulos úteis para criação da tabela de símbolos encontram-se em `symbol.py` e os módulos úteis para o preenchimento da tabela de símblos e verificação semântica de tipos encontram-se em `visitor.py` (OBS. leia as instruções do arquivo `SemanticCheckings.pdf` dentro de `doc`).   
 
-Toda parte de automação de testes está definido no diretório `tests`. Dentro do diretório `testdata` encontram-se programas escritos em MiniJava de forma correta (diretório `correct`) e incorreta (diretório `faulty`). Esses arquivos são utilizados para testar, de forma automática, o compilador em desenvolvimento. Os arquivos `lexer_test_suite_oracles.json`, `parser_test_suite_oracles.json` e `semantic_test_suite_oracles.json` dentro do diretório `testoracle` contém os oráculos de teste a serem confrontados com os resultados gerados pelo compilador em desenvolvimento. Os arquivos `test_lexer.py`, `test_paser.py` e `test_semantic.py` contém, respectivamente, testes unitários para testar os analizadores léxico, sintático e semântico. O arquivo `util.py` disponibiliza algumas funções utilitárias para os testes.
+Toda parte de automação de testes está definido no diretório `tests`. Dentro do diretório `testdata` encontram-se programas escritos em MiniJava de forma correta (diretório `correct`) e incorreta (diretório `faulty`). Esses arquivos são utilizados para testar, de forma automática, o compilador em desenvolvimento. Os arquivos `lexer_test_suite_oracles.json`, `parser_test_suite_oracles.json` e `semantic_test_suite_oracles.json` dentro do diretório `testoracle` contém os oráculos de teste a serem confrontados com os resultados gerados pelo compilador em desenvolvimento. Os arquivos `test_lexer.py`, `test_paser.py` e `test_semantic.py` contém, respectivamente, testes unitários para testar os analizadores léxico, sintático e semântico. O arquivo `util.py` disponibiliza algumas funções utilitárias para os testes. 
 
 Por fim, os arquivos `poetry.lock` e `pyproject.toml` do [Poetry](https://python-poetry.org/) estão relacionados com build automatizado e gerenciamento de depenências do projeto. 
 

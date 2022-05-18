@@ -2,63 +2,65 @@
 
 1. Qual é o nome do relator?
 
-    > Escreva sua resposta aqui
+    > Bruno Barros
 
 2. A etapa foi completamente ou parcialmente concluída?
 
-    > Escreva sua resposta aqui
+    > Acreditamos que totalmente, dado que o lexer e parser foram implementados e parecem funcionar corretamente.
 
 3. No caso de parcialmente concluída, o que não foi concluído?
 
-    > Escreva sua resposta aqui
+    > 
 
 4. O programa passa nos testes automatizados?
     
-    > Escreva sua resposta aqui
+    > Passa em todos exceto 2. No entanto, acreditamos que no caso dos 2 em que não passa, o problema é nos testes.
 
 5. Algum erro de execução foi encontrado para alguma das entradas? Quais?
     
-    > Escreva sua resposta aqui
+    > O lexer não passa em um teste da quantidade de "minus" e em um da quantidade de "tokens". Alterando os testes para imprimir o nome do arquivo em que dá erro, vimos que isso ocorre para o arquivo "Factorial.java". Olhando esse arquivo, concluímos que o problema parece ser no teste e não no lexer (de fato, o teste parece ignorar a existência de um token "minus", gerando a diferença de um "minus" e um token). 
 
 6. Quais as dificuldades encontradas para realização da etapa do projeto?
     
-    > Escreva sua resposta aqui
+    > Inicialmente não estávamos conseguindo executar os testes, e só conseguimos depois que editamos a função de erro no lexer para não parar quando se encontra um erro. Também foi difícil resolver os conflitos shift-reduce.
 
 7. Qual a participação de cada membro da equipe na etapa de execução?
     
-    > Escreva sua resposta aqui
+    > A divisão do trabalho inicialmente foi assim: George escrever o lexer, o Felipe escrever as regras do parser envolvendo Expression, Type e Identifier, e eu (Bruno) escrever o restante das regras do parser.
+    > No fim das contas, um acabou fazendo um pouco da parte do outro também - por exemplo, para testar o lexer o George resolveu escrever uma versão provisória do parser, e eu fui encontrando erros no lexer e corrigindo.
 
 
 # 2º Relatóio: Etapa AI-b (Árvores Sintática Abstrata e Análise Semântica)
 
 1. Qual é o nome do relator?
 
-    > Escreva sua resposta aqui
+    > George Harrison
 
 2. A etapa foi completamente ou parcialmente concluída?
 
-    > Escreva sua resposta aqui
+    > Parcialmente concluída.
 
 3. No caso de parcialmente concluída, o que não foi concluído?
 
-    > Escreva sua resposta aqui
+    > Parte dos testes falhou, então as implementações não estão totalmente corretas.
 
 4. O programa passa nos testes automatizados?
     
-    > Escreva sua resposta aqui
+    > Não, pois falhou em 25 deles.
 
 5. Algum erro de execução foi encontrado para alguma das entradas? Quais?
     
-    > Escreva sua resposta aqui
+    > Inicialmente alguns arquivos não conseguiam ser parseados para um Program (ou seja, sua árvore sintática abstrata). Resolvemos consertar os erros sintáticos dos arquivos, mas de modo a manter o mesmo número de erros semânticos.
 
 6. Quais as dificuldades encontradas para realização da etapa do projeto?
     
-    > Escreva sua resposta aqui
+    > Implementar os visitors e encontrar os erros nos testes relacionados às implementações.
 
 7. Qual a participação de cada membro da equipe na etapa de execução?
     
-    > Escreva sua resposta aqui
-
+    > Bruno implementou a construção da árvore abstrata sintática (ast);
+    > Felipe implementou o preenchimento da tabela de símbolos (FillSymbolTableVisitor);
+    > George implementou a checagem de tipos (TypeCheckingVisitor)
 
 # 3º Relatóio: Etapa AI-c (Tradução para o Código Intermediário)
 

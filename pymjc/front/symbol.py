@@ -154,7 +154,7 @@ class SymbolTable():
         self.curr_class = entry
         self.curr_class_name = id
         self.curr_method = None
-        self.currMethodName = None
+        self.curr_method_name = None
         if(self.contains_key(Symbol.symbol(id).to_string())):
             return False
         else:
