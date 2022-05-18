@@ -1239,6 +1239,7 @@ class TypeCheckingVisitor(TypeVisitor):
         super().__init__()
         self.semantic_errors = {}
         self.src_file_name = "UnknownSRCFile"
+        self.i=0
 
     def init_semantic_errors(self) -> None:
         for error_type in SemanticErrorType:
@@ -1248,6 +1249,8 @@ class TypeCheckingVisitor(TypeVisitor):
             self.semantic_errors = semantic_errors
 
     def add_semantic_error(self, error_type: SemanticErrorType) -> None:
+            self.i = self.i+1
+            print(self.src_file_name+" "+str(self.i)+" "+error_type.name)
             self.semantic_errors[error_type.name] += 1
 
     def set_symbol_table(self, symbol_table: SymbolTable):
@@ -1266,55 +1269,20 @@ class TypeCheckingVisitor(TypeVisitor):
         return None
 
     def visit_main_class(self, element: MainClass) -> Type:
-        table = self.get_symbol_table()
-        class_id = element.class_name_identifier
-        new_class = table.add_scope(class_id.name, ClassEntry())
-        if not new_class:
-            self.add_semantic_error(SemanticErrorType.ALREADY_DECLARED_CLASS)
-        
-        # Não-necessário, mas poderia ser aplicado
-        main_name = "main"
-        new_main = table.add_method(main_name, MethodEntry(None))
-        if not new_main:
-            self.add_semantic_error(SemanticErrorType.ALREADY_DECLARED_METHOD)
-        
-        main_arg = element.arg_name_ideintifier
-        new_arg = table.add_param(main_arg.name, str)
-        if not new_arg:
-            self.add_semantic_error(SemanticErrorType.DUPLICATED_ARG)
-        
         return None   
 
     def visit_class_decl_extends(self, element: ClassDeclExtends) -> Type:
-        table = self.get_symbol_table()
-        super_id = element.super_class_name.accept_type(self)
-        if not table.contains_key(super_id.name):
-            self.add_semantic_error(SemanticErrorType.UNDECLARED_SUPER_CLASS)
-        else:
-            class_id = element.class_name.accept_type(self)
-            new_class = table.add_scope(class_id.name, ClassEntry(super_id.name))
-            if not new_class:
-                self.add_semantic_error(SemanticErrorType.ALREADY_DECLARED_CLASS)
-            
-            table.add_extends_entry(class_id.name, super_id.name)
+        var_decl_list = element.var_decl_list
+        for i in range(var_decl_list.size()):
+            var_decl_list.element_at(i).accept_type(self)
 
-            var_decl_list = element.var_decl_list
-            for i in range(var_decl_list.size()):
-                var_decl_list.element_at(i).accept_type(self)
-
-            method_decl_list = element.method_decl_list
-            for i in range(method_decl_list.size()):
-                method_decl_list.element_at(i).accept_type(self)
+        method_decl_list = element.method_decl_list
+        for i in range(method_decl_list.size()):
+            method_decl_list.element_at(i).accept_type(self)
         
         return None  
 
     def visit_class_decl_simple(self, element: ClassDeclSimple) -> Type:
-        table = self.get_symbol_table()
-        class_id = element.class_name.accept_type(self)
-        new_class = table.add_scope(class_id.name, ClassEntry())
-        if not new_class:
-            self.add_semantic_error(SemanticErrorType.ALREADY_DECLARED_CLASS)
-
         var_decl_list = element.var_decl_list
         for i in range(var_decl_list.size()):
             var_decl_list.element_at(i).accept_type(self)
@@ -1326,30 +1294,9 @@ class TypeCheckingVisitor(TypeVisitor):
         return None  
 
     def visit_var_decl(self, element: VarDecl) -> Type:
-        table = self.get_symbol_table()
-        new_var = False
-        if not (table.curr_method==None):
-            new_var = table.add_local(element.name, element.type)
-        else:
-            new_var = table.add_field(element.name, element.type)
-        if not new_var:
-            self.add_semantic_error(SemanticErrorType.ALREADY_DECLARED_VAR)
         return element.type
 
     def visit_method_decl(self, element: MethodDecl) -> Type:
-        table = self.get_symbol_table()
-        method_id = element.name.accept_type(self)
-        new_method = table.add_method(method_id.name, MethodEntry(element.type))
-        if not new_method:
-            self.add_semantic_error(SemanticErrorType.ALREADY_DECLARED_METHOD)
-
-        formal_list = element.formal_param_list
-        for i in range(formal_list.size()):
-            formal_list.element_at(i).accept_type(self)
-        stt_list = element.statement_list
-        for i in range(stt_list.size()):
-            stt_list.element_at(i).accept_type(self)
-        
         return_exp_type = element.return_exp.accept_type(self)
         if not (type(return_exp_type) is type(element.type)):
             self.add_semantic_error(SemanticErrorType.RETURN_TYPE_MISMATCH)
@@ -1357,11 +1304,6 @@ class TypeCheckingVisitor(TypeVisitor):
         return element.type
 
     def visit_formal(self, element: Formal) -> Type:
-        table = self.get_symbol_table()
-        formal_id = element.name.accept_type(self)
-        new_param = table.add_param(formal_id.name, element.type)
-        if not new_param:
-            self.add_semantic_error(SemanticErrorType.DUPLICATED_ARG)
         return element.type
 
     def visit_int_array_type(self, element: IntArrayType) -> Type:
