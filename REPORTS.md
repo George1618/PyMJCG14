@@ -66,11 +66,11 @@
 
 1. Qual é o nome do relator?
 
-    > Escreva sua resposta aqui
+    > Felipe Bezerra
 
 2. A etapa foi completamente ou parcialmente concluída?
 
-    > Escreva sua resposta aqui
+    > 
 
 3. No caso de parcialmente concluída, o que não foi concluído?
 
