@@ -1727,7 +1727,38 @@ class TranslateVisitor(IRVisitor):
 
     @abstractmethod
     def visit_less_than(self, element: LessThan) -> translate.Exp:
-        pass
+        exp1: translate.Exp = element.left_side_exp.accept_ir(self).un_ex()
+        exp2: translate.Exp = element.right_side_exp.accept_ir(self).un_ex()
+
+        label1 = tree.Label()
+        label2 = tree.Label()
+        condition: tree.CJUMP = tree.CJUMP(2, exp1, exp2, label1, label2)
+
+        r = tree.Temp()
+        join_label = tree.Label()
+
+        return translate.Exp(tree.ESEQ(
+            tree.SEQ(
+                condition,
+                tree.SEQ(
+                    tree.LABEL(label1),
+                    tree.SEQ(
+                        tree.MOVE(tree.TEMP(r), tree.CONST(1)),
+                        tree.SEQ(
+                            tree.JUMP(join_label),
+                            tree.SEQ(
+                                tree.LABEL(label2),
+                                tree.SEQ(
+                                    tree.MOVE(tree.TEMP(r), tree.CONST(0)),
+                                    tree.LABEL(join_label)
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ), 
+            tree.TEMP(r))
+        )
 
     @abstractmethod
     def visit_plus(self, element: Plus) -> translate.Exp:
@@ -1788,15 +1819,15 @@ class TranslateVisitor(IRVisitor):
 
     @abstractmethod
     def visit_integer_literal(self, element: IntegerLiteral) -> translate.Exp:
-        pass
+        return translate.Exp(tree.CONST(element.value))
 
     @abstractmethod
     def visit_true_exp(self, element: TrueExp) -> translate.Exp:
-        pass
+        return translate.Exp(tree.CONST(1))
 
     @abstractmethod
     def visit_false_exp(self, element: FalseExp) -> translate.Exp:
-        pass
+        return translate.Exp(tree.CONST(0))
 
     @abstractmethod
     def visit_identifier_exp(self, element: IdentifierExp) -> translate.Exp:
@@ -1832,7 +1863,8 @@ class TranslateVisitor(IRVisitor):
 
     @abstractmethod
     def visit_not(self, element: Not) -> translate.Exp:
-        pass
+        return translate.Exp(tree.BINOP(1, tree.CONST(1), element.negated_exp.accept_ir(self).un_ex()))
+
 
     @abstractmethod
     def visit_identifier(self, element: Identifier) -> translate.Exp:
