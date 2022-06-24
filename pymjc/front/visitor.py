@@ -1787,7 +1787,7 @@ class TranslateVisitor(IRVisitor):
     def visit_call(self, element: Call) -> translate.Exp:
 
         callee_obj = element.callee_exp.accept_ir(self).un_ex()
-        element.callee_name_id.accept_ir(self).un_ex()
+        element.callee_name_id.accept_ir(self)
         el = tree.ExpList(callee_obj)
         for i in range(0, element.arg_list.size()):
             el.add_tail(element.arg_list.element_at(i).accept_ir(self).un_ex())
