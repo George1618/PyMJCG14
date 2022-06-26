@@ -1762,15 +1762,27 @@ class TranslateVisitor(IRVisitor):
 
     @abstractmethod
     def visit_plus(self, element: Plus) -> translate.Exp:
-        pass
+        exp1: translate.Exp = element.left_side_exp.accept_ir(self)
+        exp2: translate.Exp = element.right_side_exp.accept_ir(self)
+        result: tree.BINOP = tree.BINOP(0, exp1.un_ex(), exp2.un_ex())
+
+        return translate.Exp(result)
 
     @abstractmethod
     def visit_minus(self, element: Minus) -> translate.Exp:
-        pass
+        exp1: translate.Exp = element.left_side_exp.accept_ir(self)
+        exp2: translate.Exp = element.right_side_exp.accept_ir(self)
+        result: tree.BINOP = tree.BINOP(1, exp1.un_ex(), exp2.un_ex())
+
+        return translate.Exp(result)
 
     @abstractmethod
     def visit_times(self, element: Times) -> translate.Exp:
-        pass
+        exp1: translate.Exp = element.left_side_exp.accept_ir(self)
+        exp2: translate.Exp = element.right_side_exp.accept_ir(self)
+        result: tree.BINOP = tree.BINOP(2, exp1.un_ex(), exp2.un_ex())
+
+        return translate.Exp(result)
 
     def visit_array_lookup(self, element: ArrayLookup) -> translate.Exp:
         arr: tree.Exp = element.out_side_exp.accept_ir(self).un_ex()
