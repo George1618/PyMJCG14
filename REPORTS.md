@@ -86,7 +86,7 @@
 
 6. Quais as dificuldades encontradas para realização da etapa do projeto?
     
-    > Escreva sua resposta aqui
+    > Implementar alguns dos métodos foi difícil, como os que envolvem Identifier, pois algumas partes da teoria foram mais difíceis de entender.
 
 7. Qual a participação de cada membro da equipe na etapa de execução?
     
