@@ -70,7 +70,7 @@
 
 2. A etapa foi completamente ou parcialmente concluída?
 
-    > 
+    > A etapa foi totalmente concluída, mas possivelmente com alguns erros.
 
 3. No caso de parcialmente concluída, o que não foi concluído?
 
@@ -78,11 +78,11 @@
 
 4. O programa passa nos testes automatizados?
     
-    > Escreva sua resposta aqui
+    > Sim, ele passa. Não há testes automatizados específicos para essa etapa, mas o programa passa nos testes das etapas anteriores
 
 5. Algum erro de execução foi encontrado para alguma das entradas? Quais?
     
-    > Escreva sua resposta aqui
+    >  Não, nenhum erro de execução foi encontrado. O codigo executa de maneira aparentemente correta para todas as entradas (não há erro de execucao e os visitors geram um output no formato esperado).
 
 6. Quais as dificuldades encontradas para realização da etapa do projeto?
     
