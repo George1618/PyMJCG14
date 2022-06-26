@@ -90,7 +90,8 @@
 
 7. Qual a participação de cada membro da equipe na etapa de execução?
     
-    > Escreva sua resposta aqui
+    > Bruno Barros: ficou com os métodos que envolvem array, com a Call, com o IF e com o While.
+    > Felipe Bezerra: 
 
 
 # 4º Relatóio: Etapa AI-d (Seleção de Instruções)
