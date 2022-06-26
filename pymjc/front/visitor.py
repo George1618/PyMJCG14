@@ -1714,7 +1714,11 @@ class TranslateVisitor(IRVisitor):
 
     @abstractmethod
     def visit_and(self, element: And) -> translate.Exp:
-        pass
+        exp1: tree.Exp = element.left_side_exp.accept_ir(self)
+        exp2: tree.Exp = element.right_side_exp.accept_ir(self)
+        result: tree.BINOP = tree.BINOP(4, exp1.un_ex(), exp2.un_ex())
+
+        return translate.Exp(result)
 
     @abstractmethod
     def visit_less_than(self, element: LessThan) -> translate.Exp:
