@@ -91,7 +91,8 @@
 7. Qual a participação de cada membro da equipe na etapa de execução?
     
     > Bruno Barros: ficou com os métodos que envolvem array, com a Call, com o IF e com o While.
-    > Felipe Bezerra: 
+    > Felipe Bezerra: ficou com a implementação de Plus, minus, times, less than, not, true, false, integer literal e o and.
+    > George Harrison: ficou com Identifier e IdentifierExp, New Object, This, Print, Block e Class Decl Extends. 
 
 
 # 4º Relatóio: Etapa AI-d (Seleção de Instruções)
