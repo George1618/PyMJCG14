@@ -1726,13 +1726,8 @@ class TranslateVisitor(IRVisitor):
         )
 
     def visit_and(self, element: And) -> translate.Exp:
-<<<<<<< HEAD
-        exp1: translate.Exp = element.left_side_exp.accept_ir(self)
-        exp2: translate.Exp = element.right_side_exp.accept_ir(self)
-=======
         exp1: tree.Exp = element.left_side_exp.accept_ir(self)
         exp2: tree.Exp = element.right_side_exp.accept_ir(self)
->>>>>>> 3614fd782d30ecb43308af7755201e9e05911ede
         result: tree.BINOP = tree.BINOP(4, exp1.un_ex(), exp2.un_ex())
 
         return translate.Exp(result)
