@@ -1620,21 +1620,17 @@ class TranslateVisitor(IRVisitor):
         element.type.accept_ir(self)
         return None
 
-    @abstractmethod
     def visit_int_array_type(self, element: IntArrayType) -> translate.Exp:
-        pass
+        return None
 
-    @abstractmethod
     def visit_boolean_type(self, element: BooleanType) -> translate.Exp:
-        pass
+        return None
 
-    @abstractmethod
     def visit_integer_type(self, element: IntegerType) -> translate.Exp:
-        pass
+        return None
 
-    @abstractmethod
     def visit_identifier_type(self, element: IdentifierType) -> translate.Exp:
-        pass
+        return None
 
     def visit_block(self, element: Block) -> translate.Exp:
         exp: tree.Exp = None
@@ -1700,9 +1696,11 @@ class TranslateVisitor(IRVisitor):
                     )
                 ), tree.CONST(0)))
 
-    @abstractmethod
     def visit_print(self, element: Print) -> translate.Exp:
-        pass
+        print_exp = element.print_exp.accept_ir(self).un_ex()
+        return translate.Exp(
+            tree.ESEQ(self.current_frame.external_call("print", [print_exp]), tree.CONST(0))
+            )
 
     def visit_assign(self, element: Assign) -> translate.Exp:
         var: translate.Exp = element.left_side_id.accept_ir(self)
