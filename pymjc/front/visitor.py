@@ -458,27 +458,18 @@ class DepthFirstVisitor(Visitor):
 
 
     def visit_plus(self, element: Plus) -> None:
-        exp1: translate.Exp = element.left_side_exp.accept_ir(self)
-        exp2: translate.Exp = element.right_side_exp.accept_ir(self)
-        result: tree.BINOP = tree.BINOP(0, exp1.un_ex(), exp2.un_ex())
-
-        return translate.Exp(result)
+        element.left_side_exp.accept(self)
+        element.right_side_exp.accept(self)
 
 
     def visit_minus(self, element: Minus) -> None:
-        exp1: translate.Exp = element.left_side_exp.accept_ir(self)
-        exp2: translate.Exp = element.right_side_exp.accept_ir(self)
-        result: tree.BINOP = tree.BINOP(1, exp1.un_ex(), exp2.un_ex())
-
-        return translate.Exp(result)
+        element.left_side_exp.accept(self)
+        element.right_side_exp.accept(self)
 
     
     def visit_times(self, element: Times) -> None:
-        exp1: translate.Exp = element.left_side_exp.accept_ir(self)
-        exp2: translate.Exp = element.right_side_exp.accept_ir(self)
-        result: tree.BINOP = tree.BINOP(2, exp1.un_ex(), exp2.un_ex())
-
-        return translate.Exp(result)
+        element.left_side_exp.accept(self)
+        element.right_side_exp.accept(self)
 
 
     def visit_array_lookup(self, element: ArrayLookup) -> None:
@@ -1735,8 +1726,13 @@ class TranslateVisitor(IRVisitor):
         )
 
     def visit_and(self, element: And) -> translate.Exp:
+<<<<<<< HEAD
         exp1: translate.Exp = element.left_side_exp.accept_ir(self)
         exp2: translate.Exp = element.right_side_exp.accept_ir(self)
+=======
+        exp1: tree.Exp = element.left_side_exp.accept_ir(self)
+        exp2: tree.Exp = element.right_side_exp.accept_ir(self)
+>>>>>>> 3614fd782d30ecb43308af7755201e9e05911ede
         result: tree.BINOP = tree.BINOP(4, exp1.un_ex(), exp2.un_ex())
 
         return translate.Exp(result)

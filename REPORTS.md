@@ -70,7 +70,7 @@
 
 2. A etapa foi completamente ou parcialmente concluída?
 
-    > 
+    > A etapa foi totalmente concluída, mas possivelmente com alguns erros.
 
 3. No caso de parcialmente concluída, o que não foi concluído?
 
@@ -78,19 +78,21 @@
 
 4. O programa passa nos testes automatizados?
     
-    > Escreva sua resposta aqui
+    > Sim, ele passa. Não há testes automatizados específicos para essa etapa, mas o programa passa nos testes das etapas anteriores
 
 5. Algum erro de execução foi encontrado para alguma das entradas? Quais?
     
-    > Escreva sua resposta aqui
+    >  Não, nenhum erro de execução foi encontrado. O codigo executa de maneira aparentemente correta para todas as entradas (não há erro de execucao e os visitors geram um output no formato esperado).
 
 6. Quais as dificuldades encontradas para realização da etapa do projeto?
     
-    > Escreva sua resposta aqui
+    > Implementar alguns dos métodos foi difícil, como os que envolvem Identifier, pois algumas partes da teoria foram mais difíceis de entender.
 
 7. Qual a participação de cada membro da equipe na etapa de execução?
     
-    > Escreva sua resposta aqui
+    > Bruno Barros: ficou com os métodos que envolvem array, com a Call, com o IF e com o While.
+    > Felipe Bezerra: ficou com a implementação de Plus, minus, times, less than, not, true, false, integer literal e o and.
+    > George Harrison: ficou com Identifier e IdentifierExp, New Object, This, Print, Block e Class Decl Extends. 
 
 
 # 4º Relatóio: Etapa AI-d (Seleção de Instruções)
