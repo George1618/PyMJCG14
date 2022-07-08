@@ -28,8 +28,8 @@ class ExpList():
         if self.head is None:
             self.head = element
         else:
-            last: ExpList = self.tail
-            while last is not None:
+            last: ExpList = self
+            while last.tail is not None:
                 last = last.tail
             last.tail = ExpList(element, None)
 
@@ -323,9 +323,9 @@ class Print():
     def print_seq(self, stmt : SEQ, d: int):
         self.indent(d)
         self.sayln("SEQ(")
-        self.print_stm(stmt.left, d + 1)
+        self.print_stm(stmt.left_stm, d + 1)
         self.sayln(",")
-        self.print_stm(stmt.right, d + 1)
+        self.print_stm(stmt.right_stm, d + 1)
         self.say(")")
 
 
@@ -442,7 +442,7 @@ class Print():
         self.indent(d)
         self.say("BINOP(")
 
-        match(exp.binop):
+        match(exp.op):
             case BINOP.PLUS:
                 self.say("PLUS")
 
