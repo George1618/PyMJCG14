@@ -383,7 +383,9 @@ class MipsFrame(frame.Frame):
 
     labels = {}
 
-    word_size = 4
+    word_size_value = 4
+
+    name = None
 
     def __init__(self, symbol: Symbol = None, formal_list: BoolList = None):
         self.offset :int = 0
@@ -399,11 +401,11 @@ class MipsFrame(frame.Frame):
                 self.name = temp.Label(symbol.to_string() + "." + str(count))
             
             MipsFrame.functions[symbol.to_string()] = count
-            self.actuals = List[frame.Access]
-            self.formals = List[frame.Access]
+            self.actuals = []
+            self.formals = []
 
             offset :int = 0
-            if len(formal_list.list) == 0:
+            if len(formal_list.get_list()) == 0:
                 return None
             
             escapes = iter(formal_list.list)
@@ -417,7 +419,7 @@ class MipsFrame(frame.Frame):
                 except StopIteration:
                     break
             
-            offset += self.word_size
+            offset += self.word_size_value
             self.actuals.append(InReg(self.arg_regs[i]))
 
             if escape:
@@ -440,7 +442,7 @@ class MipsFrame(frame.Frame):
 
     def new_frame(self, symbol: Symbol, formal_list: BoolList) -> frame.Frame:
         if (self.name is not None):
-            symbol = Symbol.symbol(self.name.to_string() + "." + symbol.to_string())
+            symbol = Symbol.symbol(self.name.name.to_string() + "." + symbol.to_string())
 
         return MipsFrame(symbol, formal_list)
 
