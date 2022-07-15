@@ -5,13 +5,11 @@ from typing import List
 
 from pymjc.front.ast import *
 from pymjc.front.frame import Access, Frame
-from pymjc.front import translate
-from pymjc.front import tree
-from pymjc.front import temp
+from pymjc.front import temp, translate, tree
 from pymjc.front.visitorkinds import *
 from pymjc.front.symbol import *
 from pymjc.log import MJLogger
-from pymjc.util import Converter, BoolList
+from pymjc.util import Converter
 
 class SemanticErrorType(enum.Enum):
     ALREADY_DECLARED_CLASS = 1
@@ -1521,7 +1519,7 @@ class TranslateVisitor(IRVisitor):
     def visit_program(self, element: Program) -> translate.Exp:
         element.main_class.accept_ir(self)
 
-        for index in range(element.class_decl_list.size()):
+        for index in range(len(element.class_decl_list)):
             element.class_decl_list.element_at(index).accept_ir(self)
 
         return None
@@ -1532,18 +1530,18 @@ class TranslateVisitor(IRVisitor):
         self.symbol_table.set_curr_class(element.class_name_id.name)
         self.symbol_table.set_curr_method("main")
 
-        escapes_list = BoolList()
+        escapes_list = List[bool]
         for i in range(self.symbol_table.curr_method.get_num_params()):
-            escapes_list.add_bool(False)
+            escapes_list.append(False)
         
         frame_aux = self.current_frame.new_frame(Symbol.symbol(element.class_name_id.name + "$" + self.symbol_table.curr_method_name), escapes_list)
         self.current_frame = frame_aux
         
         stmt: translate.Exp = element.statement.accept_ir(self)
-        return_exp: translate.Exp = translate.Ex(tree.CONST(0))
-        body: tree.Stm = tree.MOVE(tree.TEMP(self.current_frame.RV()), tree.ESEQ(stmt.un_nx(), return_exp.un_ex()))
+        return_exp: translate.Exp = translate.Exp(tree.CONST(0))
+        body: tree.Stm = tree.MOVE(tree.TEMP(self.current_frame.RV()), tree.ESEQ(tree.EXP(stmt.un_ex()), return_exp.un_ex()))
 
-        stmt_list = []
+        stmt_list = List[tree.Stm]
         stmt_list.append(body)
         self.current_frame.proc_entry_exit1(stmt_list)
         self.proc_entry_exit(Converter.to_SEQ(stmt_list))
@@ -1586,11 +1584,11 @@ class TranslateVisitor(IRVisitor):
         element.type.accept_ir(self)
         element.name_id.accept_ir(self)
 
-        escapes_list = BoolList()
+        escapes_list = List[bool]
 
         for index in range(element.formal_param_list.size()):
             element.formal_param_list.element_at(index).accept_ir(self)
-            escapes_list.add_bool(False)
+            escapes_list.append(False)
 
         for index in range(element.var_decl_list.size()):
             element.var_decl_list.element_at(index).accept_ir(self)
@@ -1598,7 +1596,7 @@ class TranslateVisitor(IRVisitor):
         self.current_frame = self.current_frame.new_frame(Symbol.symbol(self.symbol_table.curr_class_name + "$" + self.symbol_table.curr_method_name), escapes_list)
 
         body: tree.Stm
-        body_list = []
+        body_list = List[tree.Stm]
         return_exp: tree.Exp = element.return_exp.accept_ir(self).un_ex()
 
         if element.statement_list.size() == 0:
@@ -1614,7 +1612,6 @@ class TranslateVisitor(IRVisitor):
         self.current_frame.proc_entry_exit1(body_list)
         self.proc_entry_exit(Converter.to_SEQ(body_list))
         self.var_access = {}
-
         return None
 
     
@@ -1695,8 +1692,8 @@ class TranslateVisitor(IRVisitor):
     def visit_print(self, element: Print) -> translate.Exp:
         print_exp: translate.Exp = element.print_exp.accept_ir(self)
         
-        args = []
-        args.append(print_exp.un_ex())
+        args = List[tree.Exp]
+        args.add(print_exp.un_ex())
         
         exp: tree.Exp = self.current_frame.external_call("print", args)
 
@@ -1727,9 +1724,9 @@ class TranslateVisitor(IRVisitor):
 
 
         index_exp: tree.Exp = element.array_exp.accept_ir(self).un_ex()
-        temp_index : temp.Temp = temp.Temp()
-        temp_size : temp.Temp = temp.Temp()
-        args = []
+        temp_index = temp.Temp = temp.Temp()
+        temp_size = temp.Temp = temp.Temp()
+        args: tree.ExpList = tree.ExpList()
         true_label: temp.Label = temp.Label()
         false_label: temp.Label = temp.Label()
 
@@ -1811,7 +1808,7 @@ class TranslateVisitor(IRVisitor):
         index: translate.Exp = element.in_side_exp.accept_ir(self).un_ex()
         false_label: temp.Label = temp.Label()
         true_label: temp.Label = temp.Label()
-        args = []
+        args = List[tree.Exp]
         word_size = self.current_frame.word_size()
 
         stm_01: tree.Stm = tree.SEQ(
@@ -1854,7 +1851,7 @@ class TranslateVisitor(IRVisitor):
         fn_label: temp.Label = temp.Label(self.call_class_name + "$" + element.callee_name_id.name)
         
         arg_list: tree.ExpList = tree.ExpList(class_exp.un_ex(), None)
-        args = []
+        args = List[tree.Exp]
         
         args.append(class_exp.un_ex())
 
@@ -1912,7 +1909,7 @@ class TranslateVisitor(IRVisitor):
 
         temp_01: temp.Temp = temp.Temp()
         temp_02: temp.Temp = temp.Temp()
-        args = []
+        args = List[tree.Exp]
         args.append(array_size)
         
        # call malloc get pointer to space allocated in temp_01
@@ -1947,12 +1944,11 @@ class TranslateVisitor(IRVisitor):
         c: ClassEntry = self.symbol_table.get_class_entry(element.object_name_id.name)
         tam: int = len(c.get_fields().keys())
 
-        params = []
+        params = List[tree.Exp]
         params.append(tree.BINOP(tree.BINOP.MUL, tree.CONST(tam + 1), tree.CONST(self.current_frame.word_size())))
         
         alloc: tree.Exp = self.current_frame.external_call("malloc", params)
-        r = tree.Temp()
-        return translate.Ex(tree.ESEQ(tree.MOVE(tree.TEMP(r), alloc), tree.TEMP(r)))
+        return translate.Ex(tree.MOVE(tree.TEMP(temp.Temp()), alloc))
 
 
     def visit_not(self, element: Not) -> translate.Exp:
