@@ -51,6 +51,7 @@ class InterferenceGraph(graph.Graph):
 class Liveness (InterferenceGraph):
 
     def __init__(self, flow: flowgraph.FlowGraph):
+        super(Liveness, self).__init__()
         self.live_map = {}
         
         #Flow Graph
@@ -76,9 +77,9 @@ class Liveness (InterferenceGraph):
         self.build_in_and_out()
         self.build_interference_graph()
     
-    def add_ndge(self, source_node: graph.Node, destiny_node: graph.Node):
+    def add_edge(self, source_node: graph.Node, destiny_node: graph.Node):
         if (source_node is not destiny_node and not destiny_node.comes_from(source_node) and not source_node.comes_from(destiny_node)):
-            super.add_edge(source_node, destiny_node)
+            super().add_edge(source_node, destiny_node)
 
     def show(self, out_path: str) -> None:
         if out_path is not None:
@@ -105,8 +106,8 @@ class Liveness (InterferenceGraph):
       return requested_node
 
     def node_handler(self, node: graph.Node):
-        def_temp_list: temp.TempList = self.flowgraph.deff(node)
-        while(def_temp_list is not None):
+    	def_temp_list: temp.TempList = self.flowgraph.deff(node)
+    	while(def_temp_list is not None):
             got_node: graph.Node  = self.get_node(def_temp_list.head)
 
             for live_out in self.out_node_table.get(node):
@@ -149,17 +150,120 @@ class Liveness (InterferenceGraph):
     def moves(self) -> MoveList:
         return self.move_list
 
+    #Estou usando as tabelas IN e OUT como o in' e o out' do algoritmo, e as tabelas KILL e GEN como o "in" e o "out"
+    #Isto é, KILL e GEN armazenam o novo valor de "in" e "out" calculado em cada iteração, e IN e OUT armazenam o anterior
+    #Também estou usando esse método para criar os nós e adicioná-los aos dois mapas
     def build_gen_and_kill(self):
-        #TODO
-        pass
+        #Percorremos os nós do flowgraph
+        nodes: graph.NodeList = self.flowgraph.mynodes
+
+        while (nodes is not None):
+
+        	#Para cada temp usado no use ou no deff de algum nó do flowgraph, criamos um nó nesse grafo e preenchemos os mapas
+        	temps: temp.TempList = self.flowgraph.use(nodes.head)
+        	while (temps is not None):
+        		temp: temp.Temp = temps.head
+        		if (self.map_node_table.get(temp) is None):
+        			new_node: graph.Node = self.new_node()
+        			self.rev_node_table[new_node] = temp
+        			self.map_node_table[temp] = new_node
+        		temps = temps.tail
+        	temps: temp.TempList = self.flowgraph.deff(nodes.head)
+        	while (temps is not None):
+        		temp: temp.Temp = temps.head
+        		if (self.map_node_table.get(temp) is None):
+        			new_node: graph.Node = self.new_node()
+        			self.rev_node_table[new_node] = temp
+        			self.map_node_table[temp] = new_node
+        		temps = temps.tail
+
+        	#Inicializamos 'gen' e 'kill'
+        	self.gen_node_table[nodes.head] = set()
+        	self.kill_node_table[nodes.head] = set()
+
+        	nodes = nodes.tail
 
     def build_in_and_out(self):
-        #TODO
-        pass
+
+    	nodes = self.flowgraph.mynodes
+    	equal = False
+
+    	#repeat
+    	while not equal:
+
+    		#for each n
+    		while (nodes is not None):
+
+    			node: graph.Node = nodes.head
+
+    			#in′[n] ← in[n]
+    			self.in_node_table[node] = self.kill_node_table.get(node)
+
+    			#out′[n] ← out[n]
+    			self.out_node_table[node] = self.gen_node_table.get(node)
+
+    			#in[n] ← use[n] U (out[n] − def[n])
+    			new_kill = self.gen_node_table.get(node)
+    			deff: temp.TempList = self.flowgraph.deff(node)
+    			while (deff is not None):
+    				d: temp.Temp = deff.head
+    				new_kill.discard(d)
+    				deff = deff.tail
+    			use: temp.TempList = self.flowgraph.use(node)
+    			while (use is not None):
+    				d: temp.Temp = use.head
+    				new_kill.add(d)
+    				use = use.tail
+    			self.kill_node_table[node] = new_kill
+
+    			#out[n] ← U s in succ[n] (in[s])
+    			new_gen = set()
+    			succ: graph.NodeList = node.succ()
+    			while (succ is not None):
+    				s: graph.Node = succ.head
+    				new_gen.union(self.kill_node_table.get(s))
+    				succ = succ.tail
+    			self.gen_node_table[node] = new_gen
+
+    			nodes = nodes.tail
+
+    		#until in′[n] = in[n] and out′[n] = out[n] for all n
+    		equal = True
+    		while (nodes is not None):
+    			node: graph.Node = nodes.head
+    			out_nodes = self.out_node_table.get(node)
+    			gen_nodes = self.gen_node_table.get(node)
+    			in_nodes = self.in_node_table.get(node)
+    			kill_nodes = self.kill_node.get(node)
+    			if (not out_nodes == gen_nodes or not in_nodes == kill_nodes):
+    				equal = False
+    			nodes = nodes.tail
+
+    	nodes = self.flowgraph.mynodes
+    	#Preenchemos o live_map
+    	while (nodes is not None):
+    		live: temp.TempList = temp.TempList()
+    		node: graph.Node = nodes.head
+    		for t in self.out_node_table.get(node):
+    			live.add_tail(t)
+    		self.live_map[node] = live
+    		nodes = nodes.tail
+
+
 
     def build_interference_graph(self):
-        #TODO
-        pass
+    	#Chamamos os métodos já definidos para preencher as arestas do grafo
+    	nodes: graph.NodeList = self.flowgraph.mynodes
+    	while (nodes is not None):
+    		node: graph.Node = nodes.head
+    		#Caso 1: nó é do tipo move
+    		if (self.flowgraph.is_move(node)):
+    			self.move_handler(node)
+    		#Caso 2: nó não é do tipo move
+    		else:
+    			self.node_handler(node)
+    		nodes = nodes.tail
+
 
 class Edge():
 
