@@ -8,9 +8,172 @@ from pymjc.front import frame, temp
 
 class RegAlloc (temp.TempMap):
     def __init__(self, frame: frame.Frame, instr_list: assem.InstrList):
-        self.frame: frame.Frame = frame
-        self.instrs: assem.InstrList = instr_list
-        #TODO
+
+    	self.preColoredNodes = set()
+    	self.normalColoredNodes = set()
+    	self.initialNodes = set()
+    	self.spillNodes = set()
+    	self.coalesceNodes = set()
+    	self.nodeStack = []
+    	self.simplifyWorklist = set()
+    	self.freezeWorklist = set()
+    	self.spillWorklist = set()
+    	self.coalesceMoveNodes = set()
+    	self.constrainMoveNodes = set()
+    	self.freezeMoveNodes = set()
+    	self.worklistMoveNodes = set()
+    	self.activeMoveNodes = set()
+    	self.spillCost = {}
+    	self.adjacenceList = {}
+    	self.adjacentSets = set()
+    	self.livenessOutput: Liveness = None
+    	self.assemFlowGraph: flowgraph.AssemFlowGraph = None
+    	self.moveNodesList = {}
+    	self.nodeDegreeTable = {}
+    	self.nodeAliasTable = {}
+    	self.nodeColorTable = {}
+    	self.generatedSpillTemps = set()
+
+    	self.frame: frame.Frame = frame
+    	self.instrs: assem.InstrList = instr_list
+    	self.mainProcedure()
+
+    def mainProcedure(self):
+
+    	while True:
+    		shallContinue = False
+
+    		self.LivenessAnalysis()
+    		self.Init()
+    		self.Build()
+    		self.MakeWorklist()
+
+    		while True:
+    			if (len(self.simplifyWorklist) != 0):
+    				self.Simplify()
+    			elif (len(self.worklistMoveNodes) != 0):
+    				self.Coalesce()
+    			elif (len(self.freezeWorklist) != 0):
+    				self.Freeze()
+    			elif (len(self.spillWorklist) != 0):
+    				self.SelectSpill()
+    			if not (len(self.simplifyWorklist) != 0 or len(self.worklistMoveNodes) != 0 or len(self.freezeWorklist) != 0 or len(self.spillWorklist) != 0):
+    				break
+
+    		self.AssignColors()
+
+    		if (len(self.spillNodes) != 0):
+    			self.RewriteProgram()
+    			shallContinue = True
+
+    		if not shallContinue:
+    			break
+
+    def LivenessAnalysis(self):
+    	self.assemFlowGraph = flowgraph.AssemFlowGraph(self.instrs)
+    	self.livenessOutput = Liveness(self.assemFlowGraph)
+
+    def Init(self):
+
+    	self.preColoredNodes.clear();
+    	self.normalColoredNodes.clear();
+    	self.initialNodes.clear();
+    	self.spillNodes.clear();
+    	self.coalesceNodes.clear();
+    	self.nodeStack.clear();
+    	self.simplifyWorklist.clear();
+    	self.freezeWorklist.clear();
+    	self.spillWorklist.clear();
+    	self.coalesceMoveNodes.clear();
+    	self.constrainMoveNodes.clear();
+    	self.freezeMoveNodes.clear();
+    	self.activeMoveNodes.clear();
+    	self.spillCost.clear();
+    	self.adjacentSets.clear();
+    	self.adjacenceList.clear();
+    	self.moveNodesList.clear();
+    	self.nodeAliasTable.clear();
+    	self.nodeColorTable.clear();
+    	self.nodeDegreeTable.clear();
+
+    	for counter in range(len(self.frame.registers())):
+    		temp: temp.Temp = self.frame.registers()[counter]
+    		node: graph.Node = self.livenessOutput.tnode(temp)
+    		self.preColoredNodes.add(node)
+    		self.spillCost[node] = sys.maxsize
+    		self.nodeColorTable[node] = node
+    		self.nodeDegreeTable[node] = 0
+
+    	nodeList: graph.NodeList = self.livenessOutput.mynodes
+    	while (nodeList != None):
+    		node: graph.Node = nodeList.head
+    		if (not node in self.preColoredNodes):
+    			self.initialNodes.add(node)
+
+    			if (self.livenessOutput.gtemp(node) in self.generatedSpillTemps):
+    				self.spillCost[node] = sys.maxsize
+    			elif (not node in self.preColoredNodes):
+    				self.spillCost[node] = 1
+
+    			self.nodeDegreeTable[node] = 0
+
+    		nodeList = nodeList.tail
+
+    def Build(self):
+    	
+    	nodeList: graph.NodeList = self.assemFlowGraph.mynodes
+
+    	while(nodeList != None):
+    		node: graph.Node = nodeList.head
+    		live = self.livenessOutput.out(node).copy()
+
+    		isMoveInstruction: bool = self.assemFlowGraph.is_move(node)
+    		if (isMoveInstruction):
+
+    			uses: temp.TempList = self.assemFlowGraph.use(node)
+    			while (uses != None):
+    				live.discard(uses.head)
+    				uses = uses.tail
+
+    			uses: temp.TempList = self.assemFlowGraph.use(node)
+    			while (uses != None):
+    				self.moveNodesListM(self.livenessOutput.tnode(uses.head)).add(node);
+    				uses = uses.tail
+
+    			defs: temp.TempList = self.assemFlowGraph.use(node)
+    			while (defs != None):
+    				self.moveNodesListM(self.livenessOutput.tnode(defs.head)).add(node);
+    				defs = defs.tail
+
+    			self.worklistMoveNodes.add(node)
+
+    		defs: temp.TempList = self.assemFlowGraph.use(node)
+    		while (defs != None):
+    			live.add(defs.head);
+    			defs = defs.tail
+
+    		defs: temp.TempList = self.assemFlowGraph.use(node)
+    		while (defs != None):
+
+    			for liveTemp in live:
+    				self.AddEdgeTemp(liveTemp, defs.head)
+
+    			defs = defs.tail
+
+    		nodeList = nodeList.tail
+
+    def MakeWorklist(self):
+
+    	K = len(self.preColoredNodes)
+
+    	for n in self.initialNodes.copy():
+    		self.initialNodes.discard(n)
+    		if (self.nodeDegreeTable.get(n) >= K):
+    			self.spillWorklist.add(n)
+    		elif (self.MoveRelated(n)):
+    			self.freezeWorklist.add(n)
+    		else:
+    			self.simplifyWorklist.add(n)
 
     def temp_map(self, temp: temp.Temp) -> str:
         #TODO
