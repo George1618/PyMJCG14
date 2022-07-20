@@ -397,25 +397,21 @@ class Color(temp.TempMap):
         K: int = len(self.preColoredNodes)
     	result: bool = (t in self.preColoredNodes) or (self.nodeDegreeTable(t) < K) or (Edge.getEdge(t, r) in self.adjacenceSets)
     	return result
-    def coalesceCheck1(self, u: graph.Node, v: graph.Node) -> bool:
-        if (u not in self.preColored):
-            return False
-        adjacence = self.adjacent(v)
-        for t in adjacence:
-            if (not self.ok(t, u)):
-                return False
-        return True
-    def coalesceCheck2(self, u: graph.Node, v: graph.Node) -> bool:
-        if (u in self.preColored):
-            return False
-        
-        nodes = self.adjacent(u).union(self.adjacent(v))
-        # conservative
-        k, K = 0, len(self.preColored)
-        for node in nodes:
-            if (self.nodeDegreeTable.get(node)>=K):
-                k = k+1
-        return k<K
+    def CoalesceAuxiliarFirstChecking(self, u: graph.Node, v: graph.Node):
+    	if not (u in self.preColoredNodes):
+    		return False
+    	for t in self.Adjacent(v):
+    		if not self.OK(t,u):
+    			return False
+    	return True
+    def CoalesceAuxiliarSecondChecking(self, u: graph.Node, v: graph.Node):
+    	if (u in self.preColoredNodes):
+    		return False
+
+    	adjacent = {self.Adjacent(u)}
+    	adjacent.addAll(self.Adjacent(v))
+
+    	return self.Conservative(adjacent)
     def combine(self, u: graph.Node, v: graph.Node) -> bool:
         if (v in self.freezeWorklist):
             self.freezeWorklist.remove(v)
