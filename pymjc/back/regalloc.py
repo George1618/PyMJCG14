@@ -448,7 +448,15 @@ class Color(temp.TempMap):
     		if (self.NodeMoves(v).size() == 0 and self.nodeDegreeTable(v) < K):
     			self.freezeWorklist.discard(v)
     			self.simplifyWorklist.add(v)
+    def Conservative(self, nodes):
+    	k: int = 0
+    	K: int = len(self.preColoredNodes)
+    	for n in nodes:
+    		if (self.nodeDegreeTable(n) >= K):
+    			k = k+1
+    	return (k < K)
 
+                
 
     def Simplify(self):
         for n in self.simplifyWorklist.copy():
