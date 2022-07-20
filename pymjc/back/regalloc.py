@@ -778,6 +778,7 @@ class Liveness (InterferenceGraph):
                 kill_nodes = self.kill_node.get(node)
                 if (not out_nodes == gen_nodes or not in_nodes == kill_nodes):
                     equal = False
+                    break
                 nodes = nodes.tail
 
         nodes = self.flowgraph.mynodes
