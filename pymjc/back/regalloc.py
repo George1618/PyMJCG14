@@ -394,12 +394,9 @@ class Color(temp.TempMap):
             self.simplifyWorklist.add(node)
 
     def ok(self, t: graph.Node, r: graph.Node) -> bool:
-        k = len(self.preColored)
-        if (t in self.preColored):
-            return True
-        if (self.nodeDegreeTable.get(t)<k):
-            return True
-        return Edge.get_edge(t, r) in self.adjacenceSets
+        K: int = len(self.preColoredNodes)
+    	result: bool = (t in self.preColoredNodes) or (self.nodeDegreeTable(t) < K) or (Edge.getEdge(t, r) in self.adjacenceSets)
+    	return result
     def coalesceCheck1(self, u: graph.Node, v: graph.Node) -> bool:
         if (u not in self.preColored):
             return False
@@ -440,64 +437,71 @@ class Color(temp.TempMap):
             self.freezeWorklist.remove(u)
             self.spillWorklist.add(u)
     def freezesMoves(self, u: graph.Node):
-        k = len(self.preColored)
-        nodeMoves = self.nodeMoves(u)
-        for m in nodeMoves:
-            x = self.interferenceGraph.tnode(self.assemFlowGraph.deff(m).head)
-            y = self.interferenceGraph.tnode(self.assemFlowGraph.use(m).head)
+        K = len(self.preColoredNodes)
 
-            v: graph.Node
-            if (self.getAlias(u)==self.getAlias(y)):
-                v = self.getAlias(x)
-            else:
-                v = self.getAlias(y)
-            self.activeModeNodes.remove(m)
-            self.freezeMoveNodes.add(m)
-            if (len(self.nodeMoves(v))==0 and self.nodeDegreeTable.get(v)<k):
-                self.freezeWorklist.remove(v)
-                self.simplifyWorklist.add(v)
+    	for m in self.NodeMoves(u):
+    		x: graph.Node = self.livenessOutput.tnode(self.assemFlowGraph.deff(m).head)
+    		y: graph.Node = self.livenessOutput.tnode(self.assemFlowGraph.use(m).head)
+    		v: graph.Node
+    		if (self.GetAlias(u) == self.GetAlias(y)):
+    			v = self.GetAlias(x)
+    		else:
+    			v = self.GetAlias(y)
+    		self.activeMoveNodes.discard(m)
+    		self.freezeMoveNodes.add(m)
+    		if (self.NodeMoves(v).size() == 0 and self.nodeDegreeTable(v) < K):
+    			self.freezeWorklist.discard(v)
+    			self.simplifyWorklist.add(v)
 
 
     def Simplify(self):
-        node = self.simplifyWorklist.pop()
-        self.nodeStack.append(node)
-        adjacence = self.adjacent(node)
-        for adjacent in adjacence:
-            self.decrementDegree(adjacent)
+        for n in self.simplifyWorklist.copy():
+    		self.simplifyWorklist.discard(n)
+    		self.nodeStack.append(n)
+    		for m in self.Adjacent(n):
+    			self.DecrementDegree(m)
     def Coalesce(self):
-        node = None
-        if (len(self.worklistMoveNodes)!=0):
-            node = self.worklistMoveNodes.pop()
-        x_head = self.assemFlowGraph.instr(node).deff().head
-        x = self.getAlias(self.interferenceGraph.tnode(x_head))
-        y_head = self.assemFlowGraph.instr(node).use().head
-        y = self.getAlias(self.interferenceGraph.tnode(y_head))
+        m: graph.Node = None
+    	for n in self.worklistMoveNodes.copy():
+    		m = n
+    	self.worklistMoveNodes.discard(m)
 
-        u, v: graph.Node
-        if (y in self.preColored):
-            u, v = y, x
-        else:
-            u, v = x, y
-        
-        e = Edge.get_edge(u, v)
-        self.worklistMoveNodes.remove(node)
-        if (u==v):
-            self.coalesceMoveNodes.add(node)
-            self.addWorklist(u)
-        elif (v in self.preColored or e in self.adjacenceSets):
-            self.constrainMoveNodes.add(node)
-            self.addWorklist(u)
-            self.addWorklist(v)
-        elif (self.coalesceCheck1(u,v) or self.coalesceCheck2(u,v)):
-            self.coalesceMoveNodes.add(node)
-            self.combine(u,v)
-            self.addWorklist(u)
-        else:
-            self.activeModeNodes.add(node)
+    	x: graph.Node = self.GetAlias(self.livenessOutput.tnode(self.assemFlowGraph.instr(m).deff().head));
+    	y: graph.Node = self.GetAlias(self.livenessOutput.tnode(self.assemFlowGraph.instr(m).use().head));
+
+    	u: graph.Node = None
+    	v: graph.Node = None
+
+    	if (y in self.preColoredNodes):
+    		u = y
+    		v = x
+    	else:
+    		u = x
+    		v = y
+
+    	e: Edge = Edge.getEdge(u,v)
+    	self.worklistMoveNodes.discard(m)
+
+    	if (u==v):
+    		self.coalesceMoveNodes.add(m)
+    		self.AddWorkList(u)
+    	elif ( (v in self.preColoredNodes) or (e in self.adjacenceSets) ):
+    		self.constrainMoveNodes.add(m)
+    		self.AddWorklist(u)
+    		self.AddWorklist(v)
+    	elif (self.CoalesceAuxiliarFirstChecking(u, v) or self.CoalesceAuxiliarSecondChecking(u, v)):
+    		self.coalesceMoveNodes.add(m)
+    		self.Combine(u, v)
+    		self.AddWorklist(u)
+    	else:
+    		self.activeMoveNodes.add(m)
+
     def Freeze(self):
-        node = self.freezeWorklist.pop()
-        self.simplifyWorklist.add(node)
-        self.freezesMoves(node)
+        u: graph.Node = self.freezeWorklist[0]
+    	self.freezeWorklist.discard(u)
+    	self.simplifyWorklist.add(u)
+    	
+    	FreezeMoves(u)
     def SelectSpill(self):
         node = self.spillWorklist.pop()
         cost = self.spillCost.get(node)
