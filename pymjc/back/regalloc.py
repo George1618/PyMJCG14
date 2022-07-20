@@ -1,34 +1,569 @@
 from __future__ import annotations
 from abc import abstractmethod
+from collections import deque
 import sys
 from typing import Set
 from pymjc.back import assem, flowgraph, graph
-from pymjc.front import frame, temp
+from pymjc.front import frame, temp, tree, canon
 
 
 class RegAlloc (temp.TempMap):
     def __init__(self, frame: frame.Frame, instr_list: assem.InstrList):
         self.frame: frame.Frame = frame
         self.instrs: assem.InstrList = instr_list
-        #TODO
+        # const para Integer.MAX_VALUE
+        INTEGERMAXVALUE: int = pow(2, 63)-1
+        
+        # estes registradores não são limpos pela reiniciação do Color
+        # worklist para nós do tipo Move
+        self.listMoveNodes: set[graph.Node] = set()
+        # registradores temporadores gerados pelo método spills do color
+        self.spillTemps: set[temp.Temp] = set()
+        
+        # procedimento principal
+        proceed = True
+        while (proceed):
+            # análise de liveness
+            self.assemFlowGraph = flowgraph.AssemFlowGraph(self.instrs)
+            self.liveness = Liveness(self.assemFlowGraph)
+            
+            # clear se torna responsabilidade de Color (isso é bom para separação de conceitos, 
+            # mas torna o clean-up das estruturas um pouco mais lento)
+            registerList = temp.TempList()
+            for register in self.frame.registers():
+                registerList.add_tail(register)
+            self.color = Color(self.liveness, self.frame, registerList)
+            self.color.setWorklistMoveNodes(self.listMoveNodes)
+            self.color.setFP(frame.FP())
+            self.color.setFlowGraph(self.assemFlowGraph)
+
+            # init
+            # criação da lista de temporários pré-coloridos
+            tempReg = registerList.head
+            while (tempReg!=None):
+                node = self.liveness.tnode(tempReg)
+                # adiciona nó com custo de spill máximo
+                self.color.preColored.add(node)
+                self.color.spillCost[node] = INTEGERMAXVALUE
+                # atualização da tabela de cores e de grau
+                self.color.nodeColorTable[node] = node
+                self.color.nodeDegreeTable[node] = 0
+            # criação da lista de registradores para os não-pré-coloridos
+            nodeList = self.liveness.nodes()
+            while (nodeList != None):
+                node = nodeList.head
+                # se o nó não está nos pré-coloridos
+                if (node not in self.color.preColored):
+                    # adiciona aos iniciais
+                    self.color.initialNodes.add(node)
+                    # definição do custo de spill, depois atualizando a tabela de graus
+                    if (self.liveness.gtemp(node) in self.spillTemps):
+                        self.color.spillCost[node] = INTEGERMAXVALUE
+                    elif (node not in self.preColored):
+                        self.color.spillCost[node] = 1
+                    self.nodeDegreeTable[node] = 0
+                nodeList = nodeList.tail
+            
+            # build
+            nodeList = self.assemFlowGraph.nodes()
+            while (nodeList != None):
+                node = nodeList.head
+                # live := liveOut(b)
+                live: set[temp.Temp] = self.liveness.out(node).copy()
+                isMoveInstr = self.assemFlowGraph.is_move(node)
+                if (isMoveInstr):
+                    uses: temp.TempList = self.assemFlowGraph.use(node)
+                    while (uses != None):
+                        live.remove(uses.head)
+                        uses = uses.tail
+                    # moveList[n] ∪ {I}
+                    uses = self.assemFlowGraph.use(node)
+                    while (uses != None):
+                        moveNodeSet = self.color.getMoveNodeSet(self.liveness.tnode(uses.head))
+                        moveNodeSet.add(node)
+                        uses = uses.tail
+                    defs = self.assemFlowGraph.deff(node)
+                    while (defs != None):
+                        moveNodeSet = self.color.getMoveNodeSet(self.liveness.tnode(defs.head))
+                        moveNodeSet.add(node)
+                        defs = defs.tail
+                    # worklistMoves ← worklistMoves ∪ {I}
+                    self.listMoveNodes.add(node)
+                # live ← live ∪ def(I)
+                defs = self.assemFlowGraph.deff(node)
+                while (defs != None):
+                    live.add(defs.head)
+                    defs = defs.tail
+                # forall d ∈ def(I)
+                defs = self.assemFlowGraph.deff(node)
+                while (defs != None):
+                    # forall l ∈ live
+                    for liveTemp in live:
+                        # AddEdge entre Temps
+                        if (liveTemp!=defs.head):
+                            self.color.addEdge(self.liveness.tnode(liveTemp), self.liveness.tnode(defs.head))
+                    defs = defs.tail
+                nodeList = nodeList.tail
+            
+            # makeWorklist
+            self.color.makeWorklist()
+            
+            # coloração dos nós para calcular os nós de transbordamento
+            spills_list: temp.TempList = self.color.spills()
+            if (spills_list.head!=None):
+                # há nós transbordando, então reescreve-se o programa
+                self.rewriteProgram()
+            else:
+                # não há nós transbordando, então os registradores são suficientes para a alocação
+                proceed = False
+        
+        # passo final (alocação de registradores)
+        auxiliarInstrList = self.instrs
+        instrListTail = None
+        # iteração da lista de instruções
+        insns = None
+        while (auxiliarInstrList!=None):
+            currentInstr = auxiliarInstrList.head
+            # se a instrução é do tipo move, pule se def e use têm o mesmo alias
+            # (semelhante a x <- x)
+            if isinstance((currentInstr,assem.MOVE)):
+                defTemp = currentInstr.deff().head
+                useTemp = currentInstr.use().head
+                defAlias = self.color.getAlias(self.liveness.tnode(defTemp))
+                useAlias = self.color.getAlias(self.liveness.tnode(useTemp))
+                if (defAlias==useAlias):
+                    continue
+            # se a lista de instruções está vazia, cria uma nova, senão, atualiza
+            if (insns is None):
+                insns = instrListTail = assem.InstrList(auxiliarInstrList.head, None)
+            else:
+                instrListTail = instrListTail.tail = assem.InstrList(auxiliarInstrList.head, None)
+            auxiliarInstrList = auxiliarInstrList.tail
+        self.instrs = insns
+
+
+
+    # classe auxiliar para memorizar a head e tail mais distante de um registrador temporário
+    class MemHeadTailTemp:
+        def __init__(self, instrList: assem.InstrList, temp: temp.Temp):
+            self.head = instrList
+            self.temp = temp
+            self.tail = self.head
+            while (self.tail != None):
+                if (self.tail.tail == None):
+                    break
+                self.tail = self.tail.tail
+
+    # gera uma instrução do tipo Fetch
+    def genFetch(self, access: frame.Access, temp: temp.Temp) -> RegAlloc.MemHeadTailTemp:
+        # registrador temporário vai para a lista de transbordamento
+        self.spillTemps.add(temp)
+        # instancia o Fetch
+        fetchInstr = tree.MOVE(tree.TEMP(temp), access.exp(tree.TEMP(self.frame.FP())))
+        # retorna o HeadTail correspondente
+        return RegAlloc.MemHeadTailTemp(self.frame.codegen(canon.Canon.linearize(fetchInstr)), temp)
+    # gera uma instrução do tipo Store
+    def getStore(self, access: frame.Access, temp: temp.Temp) -> RegAlloc.MemHeadTailTemp:
+        # semelhante ao Fetch
+        self.spillTemps.add(temp)
+        s: tree.Stm = tree.MOVE(access.exp(tree.TEMP(self.frame.FP())), tree.TEMP(temp))
+        return RegAlloc.MemHeadTailTemp(self.frame.codegen(canon.Canon.linearize(s)), temp)
+
+    # auxiliar para reescrever o programa
+    def rewriteProgram(self):
+        accessTable: dict[temp.Temp, frame.Access] = {}
+        for node in self.color.spillNodes:
+            # adiciona um acesso à memória à tabela (note que o alloc escapa)
+            accessTable[self.liveness.gtemp(node)] = frame.alloc_local(True)
+        # etapa de reescrita do programa
+        insnsPast = self.instrs
+        tail = self.instrs = None
+        while (insnsPast != None):
+            # atualização de instruções com Fetch
+            tempList = insnsPast.head.use()
+            while (tempList != None):
+                temp = tempList.head
+                access = accessTable.get(temp)
+                # se não há acesso, transborda
+                if (access != None):
+                    result = self.genFetch(access, temp)
+                    # atualização da cauda ou das instruções, de acordo com estas
+                    if (self.instrs != None):
+                        tail.tail = result.head
+                    else:
+                        self.instrs = result.head
+                    tail = result.tail
+                # introdução da nova instrução
+                newInstrList = assem.InstrList(insnsPast.head, None)
+                # atualização da cauda ou das instruções, de acordo com estas
+                if (self.instrs != None):
+                    tail = tail.tail = newInstrList
+                else:
+                    self.instrs = tail = newInstrList
+                # atualização da instrução no caso de Store
+                defTempList = insnsPast.head.deff()
+                while (defTempList != None):
+                    temp = defTempList.head
+                    access = accessTable.get(temp)
+                    # se não há acesso, transborda
+                    if (access != None):
+                        result = self.getStore(access, defTempList.head)
+                        # atualização da cauda ou das instruções, de acordo com estas
+                        if (self.instrs != None):
+                            tail.tail = result.head
+                        else:
+                            self.instrs = result.head
+                        tail = result.tail
+                        defTempList.head = result.temp
+                    defTempList = defTempList.tail
+            insnsPast = insnsPast.tail
+
 
     def temp_map(self, temp: temp.Temp) -> str:
-        #TODO
-        return temp.to_string()
+        temp_str: str = self.frame.temp_map(temp)
+        if (temp_str==None):
+            temp_str = self.color.temp_map(temp)
+        return temp_str
     
 
 class Color(temp.TempMap):
     def __init__(self, ig: InterferenceGraph, initial: temp.TempMap, registers: temp.TempList):
-        #TODO
-        pass
+        self.graph = ig
+        self.frame = initial
+        self.regs = registers
+        # (re)inicialização
+        # nós que são coloridos antes ou durante do algoritmo
+        self.preColored: set[graph.Node] = set()
+        self.normalColored: set[graph.Node] = set()
+        # nós categorizados em iniciais, de transbordamento e de aglutinação
+        self.initialNodes: set[graph.Node] = set()
+        self.spillNodes: set[graph.Node] = set()
+        self.coalesceNodes: set[graph.Node] = set()
+        # pilha de coloração (usando a estrutura deque de Collections como uma pilha)
+        self.nodeStack: deque[graph.Node] = deque()
+        # listas para as etapas de simplificação, congelamento e transbordamento
+        self.simplifyWorklist: set[graph.Node] = set()
+        self.freezeWorklist: set[graph.Node] = set()
+        self.spillWorklist: set[graph.Node] = set()
+        # nós Move (representam instrução do tipo a <- b)
+        self.coalesceMoveNodes: set[graph.Node] = set()
+        self.constrainMoveNodes: set[graph.Node] = set()
+        self.freezeMoveNodes: set[graph.Node] = set()
+        self.activeModeNodes: set[graph.Node] = set()
+        # custos de transbordamento
+        self.spillCost: dict[graph.Node, int] = {}
+        # tabela de moves (similar à lista de adjacências abaixo, mas para nós Move)
+        self.moveNodesList: dict[graph.Node, set[graph.Node]] = {}
+        # adjacências
+        self.adjacenceSets: set[Edge] = set()
+        self.adjacenceList: dict[graph.Node, set[graph.Node]] = {}
+        # tabelas de alias, cor e grau dos nós
+        self.nodeAliasTable: dict[graph.Node, graph.Node] = {}
+        self.nodeColorTable: dict[graph.Node, graph.Node] = {}
+        self.nodeDegreeTable: dict[graph.Node, int] = {}
     
+    def setWorklistMoveNodes(self, moveNodes: set[graph.Node]):
+        self.worklistMoveNodes: set[graph.Node] = set()
+        for node in moveNodes:
+            self.worklistMoveNodes.add(node)
+    def setFP(self, fp: frame.Frame):
+        self.FP: frame.Frame = fp
+    def setFlowGraph(self, flowGraph: flowgraph.AssemFlowGraph):
+        self.assemFlowGraph = flowGraph
+    
+    def getAlias(self, node: graph.Node) -> graph.Node:
+        # se está na lista de aglutinação, basta retorná-lo
+        if (node not in self.coalesceNodes):
+            return node
+        # senão, obtem-se o nó referente pela tabela de alias
+        return self.nodeAliasTable.get(node)
+    def getMoveNodeSet(self, node: graph.Node) -> set[graph.Node]:
+        if (node==None):
+            raise Exception("Node is null")
+        moveSet = self.moveNodesList.get(node)
+        if (moveSet==None):
+            moveSet = set()
+            self.moveNodesList[node] = moveSet
+        return moveSet
+
+    def getAdjacenceList(self, node: graph.Node) -> set[graph.Node]:
+        adjList = self.adjacenceList.get(node)
+        if (adjList==None):
+            adjList = set()
+            self.adjacenceList[node] = adjList
+        return adjList
+    def adjacent(self, node: graph.Node) -> set[graph.Node]:
+        unionTable = set(self.nodeStack).union(self.coalesceNodes)
+        adjacence = self.getAdjacenceList(node)
+        adjacent = set()
+        for node in adjacence:
+            # adjList[n] \ (selectStack ∪ coalescedNodes)
+            if node not in unionTable:
+                adjacent.add(node)
+        return adjacent
+    def decrementDegree(self, node: graph.Node):
+        if (node in self.preColored):
+            return
+        d = self.nodeDegreeTable.get(node)
+        self.nodeDegreeTable[node] = d-1
+
+        k = len(self.preColored)
+        if (d==k):
+            # {node} ∪ Adjacent(node)
+            adjacents = self.adjacent(node)
+            adjacents.add(node)
+            # EnableMoves({node} ∪ Adjacent(node))
+            for auxNode in adjacents:
+                self.enableMoves(auxNode)
+            self.spillWorklist.remove(node)
+            # se é MOVE-related, congela; senão, simplifica
+            if (self.moveRelated(node)):
+                self.freezeWorklist.add(node)
+            else:
+                self.simplifyWorklist.add(node)
+    def enableMoves(self, node: graph.Node):
+        # forall n ∈ nodes
+        # forall m ∈ NodeMoves(n)
+        nodeMoves = self.nodeMoves(node)
+        for node in nodeMoves:
+            # if m ∈ activeMoves then
+            if (node in self.activeMoveNodes):
+                # activeMoves ← activeMoves \ {m}
+                self.activeMoveNodes.remove(node)
+                # worklistMoves ← worklistMoves ∪ {m}
+                self.worklistMoveNodes.add(node)
+    def addEdge(self, u: graph.Node, v: graph.Node):
+        e = Edge.get_edge(u, v)
+        e_rev = Edge.get_edge(v, u)
+        # if ((u,v) ∉ adjSet) ∧ (u ≠ v) then
+        if ((e not in self.adjacenceSets) and (e != e_rev)):
+            self.adjacenceSets.add(e)
+            self.adjacenceSets.add(e_rev)
+            # if u ∉ precolored then
+            if (u not in self.preColoredNodes):
+                # adjList[u] ← adjList[u] ∪ {v}
+                # degree[u] ← degree[u]+1
+                self.adjacenceList(u).add(v)
+                self.nodeDegreeTable.put(u, self.nodeDegreeTable(u) + 1)
+            # if v ∉ precolored then
+            if (v not in self.preColoredNodes):
+                # adjList[v] ← adjList[v] ∪ {u}
+                # degree[v] ← degree[v]+1
+                self.adjacenceList(v).add(u)
+                self.nodeDegreeTable.put(v, self.nodeDegreeTable(v) + 1)
+    
+    # retorna os nós relacionados a MOVE deste nó node
+    def nodeMoves(self, node: graph.Node) -> set[graph.Node]:
+        nodeSet: set[graph.Node] = set()
+        moveSetOfNode = self.getMoveNodeSet(node)
+        activeOrNode = self.activeModeNodes.union(self.worklistMoveNodes)
+        for node in moveSetOfNode:
+            if node in activeOrNode:
+                nodeSet.add(node)
+        return nodeSet
+    # retorna se o nó está relacionado a MOVES
+    def moveRelated(self, node: graph.Node) -> bool:
+        return len(self.nodeMoves(node)) != 0
+    def makeWorklist(self):
+        k = len(self.preColored)
+        initial = list(self.initialNodes)
+        for node in initial:
+            # if degree[n] ≥ K then
+            if (self.nodeDegreeTable.get(node) >= k):
+                # spillWorklist ← spillWorklist ∪ {n}
+                self.spillWorklist.add(node)
+            # else if MoveRelated(n) then
+            elif (self.moveRelated(node)):
+                # freezeWorklist ← freezeWorklist ∪ {n}
+                self.freezeWorklist.add(node)
+            else:
+                # simplifyWorklist ← simplifyWorklist ∪ {n}
+                self.simplifyWorklist.add(node)
+    def addWorklist(self, node: graph.Node):
+        check1 = node not in self.preColored
+        check2 = not self.moveRelated(node)
+        check3 = self.nodeDegreeTable.get(node)<len(self.preColored)
+        if (check1 and check2 and check3):
+            self.freezeWorklist.remove(node)
+            self.simplifyWorklist.add(node)
+
+    def ok(self, t: graph.Node, r: graph.Node) -> bool:
+        k = len(self.preColored)
+        if (t in self.preColored):
+            return True
+        if (self.nodeDegreeTable.get(t)<k):
+            return True
+        return Edge.get_edge(t, r) in self.adjacenceSets
+    def coalesceCheck1(self, u: graph.Node, v: graph.Node) -> bool:
+        if (u not in self.preColored):
+            return False
+        adjacence = self.adjacent(v)
+        for t in adjacence:
+            if (not self.ok(t, u)):
+                return False
+        return True
+    def coalesceCheck2(self, u: graph.Node, v: graph.Node) -> bool:
+        if (u in self.preColored):
+            return False
+        
+        nodes = self.adjacent(u).union(self.adjacent(v))
+        # conservative
+        k, K = 0, len(self.preColored)
+        for node in nodes:
+            if (self.nodeDegreeTable.get(node)>=K):
+                k = k+1
+        return k<K
+    def combine(self, u: graph.Node, v: graph.Node) -> bool:
+        if (v in self.freezeWorklist):
+            self.freezeWorklist.remove(v)
+        else:
+            self.spillWorklist.remove(v)
+        self.coalesceNodes.add(v)
+        self.nodeAliasTable[v] = u
+        vMoveNodes = self.getMoveNodeSet(v)
+        for vMoveNode in vMoveNodes:
+            self.getMoveNodeSet(u).add(vMoveNode)
+        self.enableMoves(v)
+        adjacence = self.adjacent(v)
+        for t in adjacence:
+            self.addEdge(t, u)
+            self.decrementDegree(t)
+        degreeCheck = self.nodeDegreeTable.get(u) >= len(self.preColored)
+        inCheck = u in self.freezeWorklist
+        if (degreeCheck and inCheck):
+            self.freezeWorklist.remove(u)
+            self.spillWorklist.add(u)
+    def freezesMoves(self, u: graph.Node):
+        k = len(self.preColored)
+        nodeMoves = self.nodeMoves(u)
+        for m in nodeMoves:
+            x = self.graph.tnode(self.assemFlowGraph.deff(m).head)
+            y = self.graph.tnode(self.assemFlowGraph.use(m).head)
+
+            v: graph.Node
+            if (self.getAlias(u)==self.getAlias(y)):
+                v = self.getAlias(x)
+            else:
+                v = self.getAlias(y)
+            self.activeModeNodes.remove(m)
+            self.freezeMoveNodes.add(m)
+            if (len(self.nodeMoves(v))==0 and self.nodeDegreeTable.get(v)<k):
+                self.freezeWorklist.remove(v)
+                self.simplifyWorklist.add(v)
+
+
+    def Simplify(self):
+        node = self.simplifyWorklist.pop()
+        self.nodeStack.append(node)
+        adjacence = self.adjacent(node)
+        for adjacent in adjacence:
+            self.decrementDegree(adjacent)
+    def Coalesce(self):
+        node = None
+        if (len(self.worklistMoveNodes)!=0):
+            node = self.worklistMoveNodes.pop()
+        x_head = self.assemFlowGraph.instr(node).deff().head
+        x = self.getAlias(self.graph.tnode(x_head))
+        y_head = self.assemFlowGraph.instr(node).use().head
+        y = self.getAlias(self.graph.tnode(y_head))
+
+        u, v: graph.Node
+        if (y in self.preColored):
+            u, v = y, x
+        else:
+            u, v = x, y
+        
+        e = Edge.get_edge(u, v)
+        self.worklistMoveNodes.remove(node)
+        if (u==v):
+            self.coalesceMoveNodes.add(node)
+            self.addWorklist(u)
+        elif (v in self.preColored or e in self.adjacenceSets):
+            self.constrainMoveNodes.add(node)
+            self.addWorklist(u)
+            self.addWorklist(v)
+        elif (self.coalesceCheck1(u,v) or self.coalesceCheck2(u,v)):
+            self.coalesceMoveNodes.add(node)
+            self.combine(u,v)
+            self.addWorklist(u)
+        else:
+            self.activeModeNodes.add(node)
+    def Freeze(self):
+        node = self.freezeWorklist.pop()
+        self.simplifyWorklist.add(node)
+        self.freezesMoves(node)
+    def SelectSpill(self):
+        node = self.spillWorklist.pop()
+        cost = self.spillCost.get(node)
+        for spill in self.spillWorklist:
+            if (self.spillCost.get(spill) < cost):
+                node = spill
+        self.simplifyWorklist.add(node)
+        self.freezesMoves(node)
+
     def spills(self) -> temp.TempList:
-        #TODO
-        return None
+        # loop de coloração
+        doLoop = True
+        while (doLoop):
+            if (len(self.simplifyWorklist)!=0):
+                self.Simplify()
+            elif (len(self.worklistMoveNodes)!=0):
+                self.Coalesce()
+            elif (len(self.freezeWorklist)!=0):
+                self.Freeze()
+            elif (len(self.spillWorklist)!=0):
+                self.SelectSpill()
+            
+            # colorir os nós (AssignColors)
+            # enquanto a pilha de nós não está vazia...
+            while (len(self.nodeStack)!=0):
+                node = self.nodeStack.pop()
+                okColors =self.preColored.copy()
+                if (self.getAlias(node) in self.preColored):
+                    continue
+                okColors.remove(self.graph.tnode(self.FP))
+
+                adjList = self.getAdjacenceList(node)
+                # forall w ∈ adjList[n]
+                for node in adjList:
+                    used = self.preColored.union(self.normalColored)
+                    alias = self.getAlias(node)
+                    # if GetAlias(w) ∈ (coloredNodes ∪ precolored) then
+                    if (alias in used):
+                        okColors.remove(self.nodeColorTable.get(alias))
+                    # se okColors está vazia, transborda, senão colore normalmente
+                if (len(okColors)==0):
+                    self.spillNodes.add(node)
+                else:
+                    self.normalColored.add(node)
+                    # let c ∈ okColors
+                    c = okColors.pop()
+                    okColors.add(c)
+                    self.nodeColorTable[node] = c
+            # forall n ∈ coalescedNodes
+            for node in self.coalesceNodes:
+                # color[n] ← color[GetAlias(n)]
+                aliases = self.getAlias(node)
+                aliasNode = self.nodeColorTable.get(aliases)
+                if (aliasNode != None):
+                    self.nodeColorTable[node] = aliasNode
+
+
+            simplifyEmpty = len(self.simplifyWorklist)==0 
+            moveNodesEmpty = len(self.worklistMoveNodes)==0
+            freezeEmpty = len(self.freezeWorklist)==0
+            spillEmpty = len(self.spillWorklist)==0
+            doLoop = not (simplifyEmpty and moveNodesEmpty and freezeEmpty and spillEmpty)
+
+        # retorna lista de registradores transbordados
+        tempList = temp.TempList()
+        for node in self.spillNodes:
+            tempList.add_tail(self.graph.gtemp(node))
+        return tempList
 
     def temp_map(self, temp: temp.Temp) -> str:
-        #TODO
-        return temp.to_string()
+        node = self.nodeColorTable.get(self.graph.tnode(temp))
+        return self.frame.temp_map(self.graph.gtemp(node))
 
 class InterferenceGraph(graph.Graph):
     
@@ -106,8 +641,8 @@ class Liveness (InterferenceGraph):
       return requested_node
 
     def node_handler(self, node: graph.Node):
-    	def_temp_list: temp.TempList = self.flowgraph.deff(node)
-    	while(def_temp_list is not None):
+        def_temp_list: temp.TempList = self.flowgraph.deff(node)
+        while(def_temp_list is not None):
             got_node: graph.Node  = self.get_node(def_temp_list.head)
 
             for live_out in self.out_node_table.get(node):
@@ -159,110 +694,110 @@ class Liveness (InterferenceGraph):
 
         while (nodes is not None):
 
-        	#Para cada temp usado no use ou no deff de algum nó do flowgraph, criamos um nó nesse grafo e preenchemos os mapas
-        	temps: temp.TempList = self.flowgraph.use(nodes.head)
-        	while (temps is not None):
-        		temp: temp.Temp = temps.head
-        		if (self.map_node_table.get(temp) is None):
-        			new_node: graph.Node = self.new_node()
-        			self.rev_node_table[new_node] = temp
-        			self.map_node_table[temp] = new_node
-        		temps = temps.tail
-        	temps: temp.TempList = self.flowgraph.deff(nodes.head)
-        	while (temps is not None):
-        		temp: temp.Temp = temps.head
-        		if (self.map_node_table.get(temp) is None):
-        			new_node: graph.Node = self.new_node()
-        			self.rev_node_table[new_node] = temp
-        			self.map_node_table[temp] = new_node
-        		temps = temps.tail
+            #Para cada temp usado no use ou no deff de algum nó do flowgraph, criamos um nó nesse grafo e preenchemos os mapas
+            temps: temp.TempList = self.flowgraph.use(nodes.head)
+            while (temps is not None):
+                temp: temp.Temp = temps.head
+                if (self.map_node_table.get(temp) is None):
+                    new_node: graph.Node = self.new_node()
+                    self.rev_node_table[new_node] = temp
+                    self.map_node_table[temp] = new_node
+                temps = temps.tail
+            temps: temp.TempList = self.flowgraph.deff(nodes.head)
+            while (temps is not None):
+                temp: temp.Temp = temps.head
+                if (self.map_node_table.get(temp) is None):
+                    new_node: graph.Node = self.new_node()
+                    self.rev_node_table[new_node] = temp
+                    self.map_node_table[temp] = new_node
+                temps = temps.tail
 
-        	#Inicializamos 'gen' e 'kill'
-        	self.gen_node_table[nodes.head] = set()
-        	self.kill_node_table[nodes.head] = set()
+            #Inicializamos 'gen' e 'kill'
+            self.gen_node_table[nodes.head] = set()
+            self.kill_node_table[nodes.head] = set()
 
-        	nodes = nodes.tail
+            nodes = nodes.tail
 
     def build_in_and_out(self):
 
-    	nodes = self.flowgraph.mynodes
-    	equal = False
+        nodes = self.flowgraph.mynodes
+        equal = False
 
-    	#repeat
-    	while not equal:
+        #repeat
+        while not equal:
 
-    		#for each n
-    		while (nodes is not None):
+            #for each n
+            while (nodes is not None):
 
-    			node: graph.Node = nodes.head
+                node: graph.Node = nodes.head
 
-    			#in′[n] ← in[n]
-    			self.in_node_table[node] = self.kill_node_table.get(node)
+                #in′[n] ← in[n]
+                self.in_node_table[node] = self.kill_node_table.get(node)
 
-    			#out′[n] ← out[n]
-    			self.out_node_table[node] = self.gen_node_table.get(node)
+                #out′[n] ← out[n]
+                self.out_node_table[node] = self.gen_node_table.get(node)
 
-    			#in[n] ← use[n] U (out[n] − def[n])
-    			new_kill = self.gen_node_table.get(node)
-    			deff: temp.TempList = self.flowgraph.deff(node)
-    			while (deff is not None):
-    				d: temp.Temp = deff.head
-    				new_kill.discard(d)
-    				deff = deff.tail
-    			use: temp.TempList = self.flowgraph.use(node)
-    			while (use is not None):
-    				d: temp.Temp = use.head
-    				new_kill.add(d)
-    				use = use.tail
-    			self.kill_node_table[node] = new_kill
+                #in[n] ← use[n] U (out[n] − def[n])
+                new_kill = self.gen_node_table.get(node)
+                deff: temp.TempList = self.flowgraph.deff(node)
+                while (deff is not None):
+                    d: temp.Temp = deff.head
+                    new_kill.discard(d)
+                    deff = deff.tail
+                use: temp.TempList = self.flowgraph.use(node)
+                while (use is not None):
+                    d: temp.Temp = use.head
+                    new_kill.add(d)
+                    use = use.tail
+                self.kill_node_table[node] = new_kill
 
-    			#out[n] ← U s in succ[n] (in[s])
-    			new_gen = set()
-    			succ: graph.NodeList = node.succ()
-    			while (succ is not None):
-    				s: graph.Node = succ.head
-    				new_gen.union(self.kill_node_table.get(s))
-    				succ = succ.tail
-    			self.gen_node_table[node] = new_gen
+                #out[n] ← U s in succ[n] (in[s])
+                new_gen = set()
+                succ: graph.NodeList = node.succ()
+                while (succ is not None):
+                    s: graph.Node = succ.head
+                    new_gen.union(self.kill_node_table.get(s))
+                    succ = succ.tail
+                self.gen_node_table[node] = new_gen
 
-    			nodes = nodes.tail
+                nodes = nodes.tail
 
-    		#until in′[n] = in[n] and out′[n] = out[n] for all n
-    		equal = True
-    		while (nodes is not None):
-    			node: graph.Node = nodes.head
-    			out_nodes = self.out_node_table.get(node)
-    			gen_nodes = self.gen_node_table.get(node)
-    			in_nodes = self.in_node_table.get(node)
-    			kill_nodes = self.kill_node.get(node)
-    			if (not out_nodes == gen_nodes or not in_nodes == kill_nodes):
-    				equal = False
-    			nodes = nodes.tail
+            #until in′[n] = in[n] and out′[n] = out[n] for all n
+            equal = True
+            while (nodes is not None):
+                node: graph.Node = nodes.head
+                out_nodes = self.out_node_table.get(node)
+                gen_nodes = self.gen_node_table.get(node)
+                in_nodes = self.in_node_table.get(node)
+                kill_nodes = self.kill_node.get(node)
+                if (not out_nodes == gen_nodes or not in_nodes == kill_nodes):
+                    equal = False
+                nodes = nodes.tail
 
-    	nodes = self.flowgraph.mynodes
-    	#Preenchemos o live_map
-    	while (nodes is not None):
-    		live: temp.TempList = temp.TempList()
-    		node: graph.Node = nodes.head
-    		for t in self.out_node_table.get(node):
-    			live.add_tail(t)
-    		self.live_map[node] = live
-    		nodes = nodes.tail
+        nodes = self.flowgraph.mynodes
+        #Preenchemos o live_map
+        while (nodes is not None):
+            live: temp.TempList = temp.TempList()
+            node: graph.Node = nodes.head
+            for t in self.out_node_table.get(node):
+                live.add_tail(t)
+            self.live_map[node] = live
+            nodes = nodes.tail
 
 
 
     def build_interference_graph(self):
-    	#Chamamos os métodos já definidos para preencher as arestas do grafo
-    	nodes: graph.NodeList = self.flowgraph.mynodes
-    	while (nodes is not None):
-    		node: graph.Node = nodes.head
-    		#Caso 1: nó é do tipo move
-    		if (self.flowgraph.is_move(node)):
-    			self.move_handler(node)
-    		#Caso 2: nó não é do tipo move
-    		else:
-    			self.node_handler(node)
-    		nodes = nodes.tail
+        #Chamamos os métodos já definidos para preencher as arestas do grafo
+        nodes: graph.NodeList = self.flowgraph.mynodes
+        while (nodes is not None):
+            node: graph.Node = nodes.head
+            #Caso 1: nó é do tipo move
+            if (self.flowgraph.is_move(node)):
+                self.move_handler(node)
+            #Caso 2: nó não é do tipo move
+            else:
+                self.node_handler(node)
+            nodes = nodes.tail
 
 
 class Edge():
