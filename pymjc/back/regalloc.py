@@ -394,22 +394,22 @@ class Color(temp.TempMap):
             self.simplifyWorklist.add(node)
 
     def ok(self, t: graph.Node, r: graph.Node) -> bool:
-        K: int = len(self.preColoredNodes)
-    	result: bool = (t in self.preColoredNodes) or (self.nodeDegreeTable(t) < K) or (Edge.getEdge(t, r) in self.adjacenceSets)
+        K: int = len(self.preColored)
+    	result: bool = (t in self.preColored) or (self.nodeDegreeTable(t) < K) or (Edge.getEdge(t, r) in self.adjacenceSets)
     	return result
     def CoalesceAuxiliarFirstChecking(self, u: graph.Node, v: graph.Node):
-    	if not (u in self.preColoredNodes):
+    	if not (u in self.preColored):
     		return False
-    	for t in self.Adjacent(v):
-    		if not self.OK(t,u):
+    	for t in self.adjacent(v):
+    		if not self.ok(t,u):
     			return False
     	return True
     def CoalesceAuxiliarSecondChecking(self, u: graph.Node, v: graph.Node):
-    	if (u in self.preColoredNodes):
+    	if (u in self.preColored):
     		return False
 
-    	adjacent = {self.Adjacent(u)}
-    	adjacent.union(self.Adjacent(v))
+    	adjacent = {self.adjacent(u)}
+    	adjacent.union(self.adjacent(v))
 
     	return self.Conservative(adjacent)
     def combine(self, u: graph.Node, v: graph.Node) -> bool:
@@ -433,16 +433,16 @@ class Color(temp.TempMap):
             self.freezeWorklist.remove(u)
             self.spillWorklist.add(u)
     def freezesMoves(self, u: graph.Node):
-        K = len(self.preColoredNodes)
+        K = len(self.preColored)
 
-    	for m in self.NodeMoves(u):
-    		x: graph.Node = self.livenessOutput.tnode(self.assemFlowGraph.deff(m).head)
-    		y: graph.Node = self.livenessOutput.tnode(self.assemFlowGraph.use(m).head)
+    	for m in self.nodeMoves(u):
+    		x: graph.Node = self.interferenceGraph.tnode(self.assemFlowGraph.deff(m).head)
+    		y: graph.Node = self.interferenceGraph.tnode(self.assemFlowGraph.use(m).head)
     		v: graph.Node
-    		if (self.GetAlias(u) == self.GetAlias(y)):
-    			v = self.GetAlias(x)
+    		if (self.getAlias(u) == self.getAlias(y)):
+    			v = self.getAlias(x)
     		else:
-    			v = self.GetAlias(y)
+    			v = self.getAlias(y)
     		self.activeMoveNodes.discard(m)
     		self.freezeMoveNodes.add(m)
     		if (self.NodeMoves(v).size() == 0 and self.nodeDegreeTable(v) < K):
@@ -454,21 +454,21 @@ class Color(temp.TempMap):
         for n in self.simplifyWorklist.copy():
     		self.simplifyWorklist.discard(n)
     		self.nodeStack.append(n)
-    		for m in self.Adjacent(n):
-    			self.DecrementDegree(m)
+    		for m in self.adjacent(n):
+    			self.decrementDegree(m)
     def Coalesce(self):
         m: graph.Node = None
     	for n in self.worklistMoveNodes.copy():
     		m = n
     	self.worklistMoveNodes.discard(m)
 
-    	x: graph.Node = self.GetAlias(self.livenessOutput.tnode(self.assemFlowGraph.instr(m).deff().head));
-    	y: graph.Node = self.GetAlias(self.livenessOutput.tnode(self.assemFlowGraph.instr(m).use().head));
+    	x: graph.Node = self.getAlias(self.interferenceGraph.tnode(self.assemFlowGraph.instr(m).deff().head));
+    	y: graph.Node = self.getAlias(self.interferenceGraph.tnode(self.assemFlowGraph.instr(m).use().head));
 
     	u: graph.Node = None
     	v: graph.Node = None
 
-    	if (y in self.preColoredNodes):
+    	if (y in self.preColored):
     		u = y
     		v = x
     	else:
@@ -480,15 +480,15 @@ class Color(temp.TempMap):
 
     	if (u==v):
     		self.coalesceMoveNodes.add(m)
-    		self.AddWorkList(u)
-    	elif ( (v in self.preColoredNodes) or (e in self.adjacenceSets) ):
+    		self.addWorkList(u)
+    	elif ( (v in self.preColored) or (e in self.adjacenceSets) ):
     		self.constrainMoveNodes.add(m)
-    		self.AddWorklist(u)
-    		self.AddWorklist(v)
+    		self.addWorklist(u)
+    		self.addWorklist(v)
     	elif (self.CoalesceAuxiliarFirstChecking(u, v) or self.CoalesceAuxiliarSecondChecking(u, v)):
     		self.coalesceMoveNodes.add(m)
     		self.Combine(u, v)
-    		self.AddWorklist(u)
+    		self.addWorklist(u)
     	else:
     		self.activeMoveNodes.add(m)
 
@@ -497,7 +497,7 @@ class Color(temp.TempMap):
     	self.freezeWorklist.discard(u)
     	self.simplifyWorklist.add(u)
     	
-    	FreezeMoves(u)
+    	self.freezeMoves(u)
     def SelectSpill(self):
         node = self.spillWorklist.pop()
         cost = self.spillCost.get(node)
