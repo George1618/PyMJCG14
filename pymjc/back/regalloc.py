@@ -11,12 +11,10 @@ class RegAlloc (temp.TempMap):
     def __init__(self, frame: frame.Frame, instr_list: assem.InstrList):
         self.frame: frame.Frame = frame
         self.instrs: assem.InstrList = instr_list
-        # const para Integer.MAX_VALUE
-        INTEGERMAXVALUE: int = pow(2, 63)-1
         
         # estes registradores não são limpos pela reiniciação do Color
         # worklist para nós do tipo Move
-        self.listMoveNodes: set[graph.Node] = set()
+        self.worklistMoveNodes: set[graph.Node] = set()
         # registradores temporadores gerados pelo método spills do color
         self.spillTemps: set[temp.Temp] = set()
         
@@ -33,36 +31,13 @@ class RegAlloc (temp.TempMap):
             for register in self.frame.registers():
                 registerList.add_tail(register)
             self.color = Color(self.liveness, self.frame, registerList)
-            self.color.setWorklistMoveNodes(self.listMoveNodes)
+            self.color.setWorklistMoveNodes(self.worklistMoveNodes)
+            self.color.setSpillTemps(self.spillTemps)
             self.color.setFP(frame.FP())
             self.color.setFlowGraph(self.assemFlowGraph)
 
             # init
-            # criação da lista de temporários pré-coloridos
-            tempReg = registerList.head
-            while (tempReg!=None):
-                node = self.liveness.tnode(tempReg)
-                # adiciona nó com custo de spill máximo
-                self.color.preColored.add(node)
-                self.color.spillCost[node] = INTEGERMAXVALUE
-                # atualização da tabela de cores e de grau
-                self.color.nodeColorTable[node] = node
-                self.color.nodeDegreeTable[node] = 0
-            # criação da lista de registradores para os não-pré-coloridos
-            nodeList = self.liveness.nodes()
-            while (nodeList != None):
-                node = nodeList.head
-                # se o nó não está nos pré-coloridos
-                if (node not in self.color.preColored):
-                    # adiciona aos iniciais
-                    self.color.initialNodes.add(node)
-                    # definição do custo de spill, depois atualizando a tabela de graus
-                    if (self.liveness.gtemp(node) in self.spillTemps):
-                        self.color.spillCost[node] = INTEGERMAXVALUE
-                    elif (node not in self.preColored):
-                        self.color.spillCost[node] = 1
-                    self.nodeDegreeTable[node] = 0
-                nodeList = nodeList.tail
+            self.color.init()
             
             # build
             nodeList = self.assemFlowGraph.nodes()
@@ -88,7 +63,7 @@ class RegAlloc (temp.TempMap):
                         moveNodeSet.add(node)
                         defs = defs.tail
                     # worklistMoves ← worklistMoves ∪ {I}
-                    self.listMoveNodes.add(node)
+                    self.worklistMoveNodes.add(node)
                 # live ← live ∪ def(I)
                 defs = self.assemFlowGraph.deff(node)
                 while (defs != None):
@@ -228,9 +203,9 @@ class RegAlloc (temp.TempMap):
 
 class Color(temp.TempMap):
     def __init__(self, ig: InterferenceGraph, initial: temp.TempMap, registers: temp.TempList):
-        self.graph = ig
+        self.interferenceGraph = ig
         self.frame = initial
-        self.regs = registers
+        self.registers = registers
         # (re)inicialização
         # nós que são coloridos antes ou durante do algoritmo
         self.preColored: set[graph.Node] = set()
@@ -266,10 +241,41 @@ class Color(temp.TempMap):
         self.worklistMoveNodes: set[graph.Node] = set()
         for node in moveNodes:
             self.worklistMoveNodes.add(node)
+    def setSpillTemps(self, spillTemps: set[temp.Temp]):
+        self.spillTemps = spillTemps
     def setFP(self, fp: frame.Frame):
         self.FP: frame.Frame = fp
     def setFlowGraph(self, flowGraph: flowgraph.AssemFlowGraph):
         self.assemFlowGraph = flowGraph
+    
+    def init(self):
+        # const para Integer.MAX_VALUE
+        INTEGERMAXVALUE: int = sys.maxsize
+        # criação da lista de temporários pré-coloridos
+        tempReg = self.registers.head
+        while (tempReg!=None):
+            node = self.interferenceGraph.tnode(tempReg)
+            # adiciona nó com custo de spill máximo
+            self.preColored.add(node)
+            self.spillCost[node] = INTEGERMAXVALUE
+            # atualização da tabela de cores e de grau
+            self.nodeColorTable[node] = node
+            self.nodeDegreeTable[node] = 0
+        # criação da lista de registradores para os não-pré-coloridos
+        nodeList = self.interferenceGraph.nodes()
+        while (nodeList != None):
+            node = nodeList.head
+            # se o nó não está nos pré-coloridos
+            if (node not in self.preColored):
+                # adiciona aos iniciais
+                self.initialNodes.add(node)
+                # definição do custo de spill, depois atualizando a tabela de graus
+                if (self.interferenceGraph.gtemp(node) in self.spillTemps):
+                    self.spillCost[node] = INTEGERMAXVALUE
+                elif (node not in self.preColored):
+                    self.spillCost[node] = 1
+                self.nodeDegreeTable[node] = 0
+            nodeList = nodeList.tail
     
     def getAlias(self, node: graph.Node) -> graph.Node:
         # se está na lista de aglutinação, basta retorná-lo
@@ -437,8 +443,8 @@ class Color(temp.TempMap):
         k = len(self.preColored)
         nodeMoves = self.nodeMoves(u)
         for m in nodeMoves:
-            x = self.graph.tnode(self.assemFlowGraph.deff(m).head)
-            y = self.graph.tnode(self.assemFlowGraph.use(m).head)
+            x = self.interferenceGraph.tnode(self.assemFlowGraph.deff(m).head)
+            y = self.interferenceGraph.tnode(self.assemFlowGraph.use(m).head)
 
             v: graph.Node
             if (self.getAlias(u)==self.getAlias(y)):
@@ -463,9 +469,9 @@ class Color(temp.TempMap):
         if (len(self.worklistMoveNodes)!=0):
             node = self.worklistMoveNodes.pop()
         x_head = self.assemFlowGraph.instr(node).deff().head
-        x = self.getAlias(self.graph.tnode(x_head))
+        x = self.getAlias(self.interferenceGraph.tnode(x_head))
         y_head = self.assemFlowGraph.instr(node).use().head
-        y = self.getAlias(self.graph.tnode(y_head))
+        y = self.getAlias(self.interferenceGraph.tnode(y_head))
 
         u, v: graph.Node
         if (y in self.preColored):
@@ -521,7 +527,7 @@ class Color(temp.TempMap):
                 okColors =self.preColored.copy()
                 if (self.getAlias(node) in self.preColored):
                     continue
-                okColors.remove(self.graph.tnode(self.FP))
+                okColors.remove(self.interferenceGraph.tnode(self.FP))
 
                 adjList = self.getAdjacenceList(node)
                 # forall w ∈ adjList[n]
@@ -558,12 +564,12 @@ class Color(temp.TempMap):
         # retorna lista de registradores transbordados
         tempList = temp.TempList()
         for node in self.spillNodes:
-            tempList.add_tail(self.graph.gtemp(node))
+            tempList.add_tail(self.interferenceGraph.gtemp(node))
         return tempList
 
     def temp_map(self, temp: temp.Temp) -> str:
-        node = self.nodeColorTable.get(self.graph.tnode(temp))
-        return self.frame.temp_map(self.graph.gtemp(node))
+        node = self.nodeColorTable.get(self.interferenceGraph.tnode(temp))
+        return self.frame.temp_map(self.interferenceGraph.gtemp(node))
 
 class InterferenceGraph(graph.Graph):
     
