@@ -409,7 +409,7 @@ class Color(temp.TempMap):
     		return False
 
     	adjacent = {self.Adjacent(u)}
-    	adjacent.addAll(self.Adjacent(v))
+    	adjacent.union(self.Adjacent(v))
 
     	return self.Conservative(adjacent)
     def combine(self, u: graph.Node, v: graph.Node) -> bool:
