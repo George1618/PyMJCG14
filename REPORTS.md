@@ -99,31 +99,31 @@
 
 1. Qual é o nome do relator?
 
-    > Escreva sua resposta aqui
+    > Bruno Barros de Sousa
 
 2. A etapa foi completamente ou parcialmente concluída?
 
-    > Escreva sua resposta aqui
+    > Quase completamente. Os algoritmos mostrados nas aulas e no livro foram implementados.
 
 3. No caso de parcialmente concluída, o que não foi concluído?
 
-    > Escreva sua resposta aqui
+    > O código quebra quando se executa ele diretamente (em vez de se executar apenas os testes). Há alguns bugs nas outras classes (Visitor, Canon etc.) que nós não conseguimos resolver.
 
 4. O programa passa nos testes automatizados?
     
-    > Escreva sua resposta aqui
+    > Não há testes para essa etapa, mas ele continua passando nos testes anteriores.
 
 5. Algum erro de execução foi encontrado para alguma das entradas? Quais?
     
-    > Escreva sua resposta aqui
+    > Sim, conforme mencionado, o código quebra quando se executa o programa diretamente, em vez de apenas os testes. No entanto, os bugs ocorrem em outras classes.
 
 6. Quais as dificuldades encontradas para realização da etapa do projeto?
     
-    > Escreva sua resposta aqui
+    > A ocorrência desses bugs, porque isso tornou difícil verificar se a nossa implementação das classes em RegAlloc em si está correta. Outra dificuldade que tivemos inicialmente foi entender o que deveriam fazer a classe Color e as tabelas "gen" e "kill" da classe Liveness.
 
 7. Qual a participação de cada membro da equipe na etapa de execução?
     
-    > Escreva sua resposta aqui
+    > Eu (Bruno) fiquei responsável pela classe Liveness, o Felipe pela tradução dos métodos Simplify, Coalesce, Freeze, FreezeMoves, ok, CoalesceAuxiliarFirstChecking e CoalesceAuxiliarSecondChecking, e o George pelo restante dos métodos das classes Color e RegAlloc.
 
 
 # 5º Relatóio: Etapa AI-e (Alocação de Registradores)
